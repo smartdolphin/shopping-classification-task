@@ -22,9 +22,12 @@ import h5py
 import tqdm
 import numpy as np
 import six
+import keras
 
+from datetime import datetime
 from keras.models import load_model
 from keras.callbacks import ModelCheckpoint
+from kreas.utils.training_utils import multi_gpu_model
 from six.moves import zip, cPickle
 
 from misc import get_logger, Option
@@ -124,7 +127,7 @@ class Classifier():
                 pbar.update(X[0].shape[0])
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
-    def train(self, data_root, out_dir):
+    def train(self, data_root, out_dir, model_name=None):
         data_path = os.path.join(data_root, 'data.h5py')
         meta_path = os.path.join(data_root, 'meta')
         data = h5py.File(data_path, 'r')
@@ -159,13 +162,21 @@ class Classifier():
                                             batch_size=opt.batch_size)
         self.validation_steps = int(np.ceil(total_dev_samples / float(opt.batch_size)))
 
+        if not model_name:
+            now = datetime.now()
+            model_name = '{}-{}-{} {}:{}:{}'.format(now.year, now.month, now.day,
+                    now.hour, now.minute, now.second)
+        tb_hist = keras.callbacks.TensorBoard(log_dir='./graph/{0}'.format(model_name),
+                histogram_freq=0, write_graph=True, write_images=True)
+        if opt.num_gpus > 1:
+            model = multi_gpu_model(model, gpus=opt.num_gpus)
         model.fit_generator(generator=train_gen,
                             steps_per_epoch=self.steps_per_epoch,
                             epochs=opt.num_epochs,
                             validation_data=dev_gen,
                             validation_steps=self.validation_steps,
                             shuffle=True,
-                            callbacks=[checkpoint])
+                            callbacks=[checkpoint, tb_hist])
 
         model.load_weights(self.weight_fname) # loads from checkout point if exists
         open(self.model_fname + '.json', 'w').write(model.to_json())
