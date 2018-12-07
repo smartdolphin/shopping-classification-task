@@ -18,7 +18,7 @@ import tensorflow as tf
 import keras
 from keras.models import Model
 from keras.layers.merge import dot
-from keras.layers import Dense, Input
+from keras.layers import Dense, Input, concatenate
 from keras.layers.core import Reshape
 
 from keras.layers.embeddings import Embedding
@@ -63,4 +63,41 @@ class TextOnly:
                         optimizer=optm,
                         metrics=[top1_acc])
             model.summary(print_fn=lambda x: self.logger.info(x))
+        return model
+
+
+class TextImage:
+    def __init__(self):
+        self.logger = get_logger('textimg')
+
+    def get_model(self, num_classes, activation='sigmoid'):
+        max_len = opt.max_len
+        voca_size = opt.unigram_hash_size + 1
+
+        embd = Embedding(voca_size,
+                         opt.embd_size,
+                         name='uni_embd')
+
+        t_uni = Input((max_len,), name="input_1")
+        t_uni_embd = embd(t_uni)  # token
+
+        w_uni = Input((max_len,), name="input_2")
+        w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
+
+        # image feature
+        img = Input((opt.img_size,), name="input_3")
+
+        uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
+        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
+        img_feat = Reshape((opt.img_size, ))(img)
+        pair = concatenate([uni_embd, img_feat])
+        embd_out = Dropout(rate=0.5)(pair)
+        relu = Activation('relu', name='relu1')(embd_out)
+        outputs = Dense(num_classes, activation=activation)(relu)
+        model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
+        optm = keras.optimizers.Nadam(opt.lr)
+        model.compile(loss='binary_crossentropy',
+                    optimizer=optm,
+                    metrics=[top1_acc])
+        model.summary(print_fn=lambda x: self.logger.info(x))
         return model
