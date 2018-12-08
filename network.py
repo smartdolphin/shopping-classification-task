@@ -70,7 +70,7 @@ class TextImage:
     def __init__(self):
         self.logger = get_logger('textimg')
 
-    def get_model(self, num_classes, activation='sigmoid'):
+    def get_model(self, num_classes, activation='softmax'):
         max_len = opt.max_len
         voca_size = opt.unigram_hash_size + 1
 
@@ -96,7 +96,7 @@ class TextImage:
         outputs = Dense(num_classes, activation=activation)(relu)
         model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
         optm = keras.optimizers.Nadam(opt.lr)
-        model.compile(loss='binary_crossentropy',
+        model.compile(loss='categorical_crossentropy',
                     optimizer=optm,
                     metrics=[top1_acc])
         model.summary(print_fn=lambda x: self.logger.info(x))
@@ -107,7 +107,7 @@ class TextImagePrice:
     def __init__(self):
         self.logger = get_logger('textimgprice')
 
-    def get_model(self, num_classes, activation='sigmoid'):
+    def get_model(self, num_classes, activation='softmax'):
         max_len = opt.max_len
         voca_size = opt.unigram_hash_size + 1
 
@@ -137,7 +137,7 @@ class TextImagePrice:
         outputs = Dense(num_classes, activation=activation)(relu)
         model = Model(inputs=[t_uni, w_uni, img, price], outputs=outputs)
         optm = keras.optimizers.Nadam(opt.lr)
-        model.compile(loss='binary_crossentropy',
+        model.compile(loss='categorical_crossentropy',
                     optimizer=optm,
                     metrics=[top1_acc])
         model.summary(print_fn=lambda x: self.logger.info(x))
