@@ -230,7 +230,10 @@ class Data:
 
         # image feature
         img = h['img_feat'][i]
-        return Y, (x, v, img)
+
+        # price feature
+        price = h['price'][i]
+        return Y, (x, v, img, price)
 
     def create_dataset(self, g, size, num_classes):
         shape = (size, opt.max_len)
@@ -238,6 +241,7 @@ class Data:
         g.create_dataset('uni', shape, chunks=True, dtype=np.int32)
         g.create_dataset('w_uni', shape, chunks=True, dtype=np.float32)
         g.create_dataset('img', img_shape, chunks=True, dtype=np.float32)
+        g.create_dataset('price', (size, 1), chunks=True, dtype=np.int32)
         g.create_dataset('cate', (size, num_classes), chunks=True, dtype=np.int32)
         g.create_dataset('pid', (size,), chunks=True, dtype='S12')
 
@@ -249,6 +253,7 @@ class Data:
         chunk['uni'] = np.zeros(shape=chunk_shape, dtype=np.int32)
         chunk['w_uni'] = np.zeros(shape=chunk_shape, dtype=np.float32)
         chunk['img'] = np.zeros(shape=img_shape, dtype=np.float32)
+        chunk['price'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
         chunk['cate'] = np.zeros(shape=(chunk_size, num_classes), dtype=np.int32)
         chunk['pid'] = []
         chunk['num'] = 0
@@ -259,6 +264,7 @@ class Data:
         dataset['uni'][offset:offset + num, :] = chunk['uni'][:num]
         dataset['w_uni'][offset:offset + num, :] = chunk['w_uni'][:num]
         dataset['img'][offset:offset + num, :] = chunk['img'][:num]
+        dataset['price'][offset:offset + num, :] = chunk['price'][:num]
         dataset['cate'][offset:offset + num] = chunk['cate'][:num]
         if with_pid_field:
             dataset['pid'][offset:offset + num] = chunk['pid'][:num]
@@ -269,6 +275,7 @@ class Data:
         A['uni'][offset:offset + num, :] = B['uni'][:num]
         A['w_uni'][offset:offset + num, :] = B['w_uni'][:num]
         A['img'][offset:offset + num, :] = B['img'][:num]
+        A['price'][offset:offset + num, :] = B['price'][:num]
         A['cate'][offset:offset + num, y_offset:y_offset + y_num] = B['cate'][:num]
         if with_pid_field:
             A['pid'][offset:offset + num] = B['pid'][:num]
@@ -342,7 +349,7 @@ class Data:
             for data_idx, (pid, y, vw) in data:
                 if y is None:
                     continue
-                v, w, img = vw
+                v, w, img, price = vw
                 is_train = train_indices[sample_idx + data_idx]
                 if all_dev:
                     is_train = False
@@ -355,6 +362,7 @@ class Data:
                 c['uni'][idx] = v
                 c['w_uni'][idx] = w
                 c['img'][idx] = img
+                c['price'][idx] = price
                 c['cate'][idx] = y
                 c['num'] += 1
                 if not is_train:
