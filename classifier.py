@@ -31,7 +31,7 @@ from keras.utils.training_utils import multi_gpu_model
 from six.moves import zip, cPickle
 
 from misc import get_logger, Option
-from network import TextOnly, top1_acc, TextImage, TextImagePrice
+from network import TextOnly, top1_acc, TextImage, TextImagePrice, TextImagePriceNN
 
 opt = Option('./config.json')
 if six.PY2:
@@ -149,7 +149,7 @@ class Classifier():
         checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_loss',
                                      save_best_only=True, mode='min', period=10)
 
-        textimgprice = TextImagePrice()
+        textimgprice = TextImagePriceNN()
         model = textimgprice.get_model(self.num_classes)
 
         total_train_samples = train['uni'].shape[0]
