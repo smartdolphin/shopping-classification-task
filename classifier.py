@@ -31,7 +31,8 @@ from keras.utils.training_utils import multi_gpu_model
 from six.moves import zip, cPickle
 
 from misc import get_logger, Option
-from network import TextOnly, top1_acc, TextImage, TextImagePrice, TextImagePriceNN
+from network import TextOnly, top1_acc, TextImage, TextImagePrice, TextImagePriceNN,\
+        TextImageNN
 
 opt = Option('./config.json')
 if six.PY2:
@@ -50,7 +51,7 @@ class Classifier():
         left, limit = 0, ds['uni'].shape[0]
         while True:
             right = min(left + batch_size, limit)
-            X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img', 'price']]
+            X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
             Y = ds['cate'][left:right]
             yield X, Y
             left = right
@@ -149,8 +150,8 @@ class Classifier():
         checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_loss',
                                      save_best_only=True, mode='min', period=10)
 
-        textimgprice = TextImagePriceNN()
-        model = textimgprice.get_model(self.num_classes)
+        textimg = TextImageNN()
+        model = textimg.get_model(self.num_classes)
 
         total_train_samples = train['uni'].shape[0]
         train_gen = self.get_sample_generator(train,
