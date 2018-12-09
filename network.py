@@ -103,6 +103,46 @@ class TextImage:
         return model
 
 
+class TextImageNN:
+    def __init__(self):
+        self.logger = get_logger('text_img_nn')
+
+    def get_model(self, num_classes, activation='softmax'):
+        max_len = opt.max_len
+        voca_size = opt.unigram_hash_size + 1
+
+        embd = Embedding(voca_size,
+                         opt.embd_size,
+                         name='uni_embd')
+
+        t_uni = Input((max_len,), name="input_1")
+        t_uni_embd = embd(t_uni)  # token
+
+        w_uni = Input((max_len,), name="input_2")
+        w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
+
+        # image feature
+        img = Input((opt.img_size,), name="input_3")
+
+        uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
+        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
+        img_feat = Reshape((opt.img_size, ))(img)
+        pair = concatenate([uni_embd, img_feat])
+        x = Dropout(rate=0.5)(pair)
+        x = Dense(opt.hidden_size, activation='relu')(x)
+        x = Dropout(rate=0.5)(x)
+        x = Dense(opt.hidden_size // 2, activation='relu')(x)
+        x = Dropout(rate=0.5)(x)
+        outputs = Dense(num_classes, activation=activation)(x)
+        model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
+        optm = keras.optimizers.Nadam(opt.lr)
+        model.compile(loss='categorical_crossentropy',
+                    optimizer=optm,
+                    metrics=[top1_acc])
+        model.summary(print_fn=lambda x: self.logger.info(x))
+        return model
+
+
 class TextImagePrice:
     def __init__(self):
         self.logger = get_logger('text_img_price')
