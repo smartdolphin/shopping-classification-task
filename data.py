@@ -20,6 +20,8 @@ import traceback
 from collections import Counter
 from multiprocessing import Pool
 
+import json
+import pandas as pd
 import tqdm
 import fire
 import h5py
@@ -124,6 +126,15 @@ def build_y_vocab(data):
     except Exception:
         raise Exception("".join(traceback.format_exception(*sys.exc_info())))
     return y_vocab
+
+
+def make_csv_content(data):
+    try:
+        cls, data_root, our_dir, data_path, target = data
+        data = cls()
+        data.generate_csv(data_root, our_dir, data_path, target)
+    except Exception:
+        raise Exception("".join(traceback.format_exception(*sys.exc_info())))
 
 
 class Data:
@@ -399,8 +410,102 @@ class Data:
         self.logger.info('data: %s' % os.path.join(output_dir, 'data.h5py'))
         self.logger.info('meta: %s' % os.path.join(output_dir, 'meta'))
 
+    def get_class(self, h, i):
+        b = h['bcateid'][i]
+        m = h['mcateid'][i]
+        s = h['scateid'][i]
+        d = h['dcateid'][i]
+        return '%s>%s>%s>%s' % (b, m, s, d)
+
+    def get_inverted_cate1(self, cate1):
+        inv_cate1 = {}
+        for d in ['b', 'm', 's', 'd']:
+            inv_cate1[d] = {v: k for k, v in six.iteritems(cate1[d])}
+        return inv_cate1
+
+    def generate_csv(self, data_root, our_dir, data_path, target):
+        self.logger.info('load from {}'.format(data_path))
+        if six.PY2:
+            cate1 = json.loads(open('../cate1.json').read())
+        else:
+            cate1 = json.loads(open('../cate1.json', 'rb').read().decode('utf-8'))
+
+        inv_cate1 = self.get_inverted_cate1(cate1)
+        tpl = '{pid}\t{b}\t{m}\t{s}\t{d}'
+
+        meta_path = os.path.join(data_root, 'meta')
+        meta = cPickle.loads(open(meta_path, 'rb').read())
+
+        with h5py.File(data_path) as h:
+            data= h[target]
+            size = h[target]['pid'].shape[0]
+            self.logger.info('{} size is {}'.format(data_path, size))
+            df = pd.DataFrame(columns=['brand', 'maker', 'model', 'pid', 'price',
+                'product', 'updttm', 'cate', 'cate_kor', 'classes'])
+
+            for i in tqdm.trange(size):
+                label = self.get_class(data, i)
+                tkns = list(map(int, label.split('>')))
+                b, m, s, d = tkns
+                assert b in inv_cate1['b']
+                assert m in inv_cate1['m']
+                assert s in inv_cate1['s']
+                assert d in inv_cate1['d']
+                b = inv_cate1['b'][b]
+                m = inv_cate1['m'][m]
+                s = inv_cate1['s'][s]
+                d = inv_cate1['d'][d]
+                pid = data['pid'][i].decode('utf-8')
+                kor_label = tpl.format(pid=pid, b=b, m=m, s=s, d=d)
+
+                assert label in meta['y_vocab']
+
+                df.loc[i] = [data['brand'][i].decode('utf-8'),
+                        data['maker'][i].decode('utf-8'),
+                        data['model'][i].decode('utf-8'),
+                        pid,
+                        data['price'][i],
+                        data['product'][i].decode('utf-8'),
+                        data['updttm'][i],
+                        label,
+                        kor_label,
+                        meta['y_vocab'][label]]
+
+            file_name = os.path.basename(data_path)
+            if not os.path.exists(our_dir):
+                os.makedirs(our_dir, exist_ok=True)
+            csv_name = file_name.split('.')[0]
+            csv_num = file_name.split('.')[2]
+            csv_file_path = os.path.join(our_dir, '{}_{}.csv'.format(csv_name, csv_num))
+            df.to_csv(csv_file_path)
+            self.logger.info('{} is saved'.format(csv_file_path))
+
+    def make_csv(self, data_root, our_dir, target='train', config_path='./config.json'):
+        cfg_opt = Option(config_path)
+        if target == 'train':
+            data_list = cfg_opt.train_data_list
+        elif target == 'dev':
+            data_list = cfg_opt.dev_data_list
+        elif target == 'test':
+            data_list = cfg_opt.test_data_list
+        else:
+            raise Exception('unknown target :{}'.format(target))
+        pool = Pool(len(data_list))
+        try:
+            rets = pool.map_async(make_csv_content,
+                                  [(Data, data_root, our_dir, data_path, target)
+                                   for data_path in data_list]).get(99999999)
+            pool.close()
+            pool.join()
+        except KeyboardInterrupt:
+            pool.terminate()
+            pool.join()
+            raise
+        self.logger.info('{} jobs finish'.format(len(cfg_opt.train_data_list)))
+
 
 if __name__ == '__main__':
     data = Data()
     fire.Fire({'make_db': data.make_db,
+               'make_csv': data.make_csv,
                'build_y_vocab': data.build_y_vocab})
