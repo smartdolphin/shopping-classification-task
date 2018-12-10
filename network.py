@@ -24,7 +24,7 @@ from keras.layers.core import Reshape
 from keras.layers.embeddings import Embedding
 from keras.layers.core import Dropout, Activation
 
-from misc import get_logger, Option
+from misc import get_logger, Option, ModelMGPU
 opt = Option('./config.json')
 
 
@@ -135,6 +135,8 @@ class TextImageNN:
         x = Dropout(rate=0.5)(x)
         outputs = Dense(num_classes, activation=activation)(x)
         model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
+        if opt.num_gpus > 1:
+            model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
         model.compile(loss='categorical_crossentropy',
                     optimizer=optm,

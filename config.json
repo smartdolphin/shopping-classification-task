@@ -17,11 +17,12 @@
     "db_chunk_size": 100000,
     "num_workers": 8,
     "num_predict_workers": 8,
+    "num_checkpoint": 1,
     "embd_size": 128,
     "hidden_size": 1000,
     "lr": 1e-4,
     "num_epochs": 100,
     "batch_size": 1024,
     "img_size": 2048,
-    "num_gpus": 1
+    "num_gpus": 4
 }

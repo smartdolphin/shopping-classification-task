@@ -148,7 +148,7 @@ class Classifier():
         self.logger.info('# of dev samples: %s' % dev['cate'].shape[0])
 
         checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_loss',
-                                     save_best_only=True, mode='min', period=10)
+                                     save_best_only=True, mode='min', period=opt.num_checkpoint)
 
         textimg = TextImageNN()
         model = textimg.get_model(self.num_classes)
@@ -169,8 +169,7 @@ class Classifier():
                     now.hour, now.minute, now.second)
         tb_hist = keras.callbacks.TensorBoard(log_dir='./graph/{0}'.format(model_name),
                 histogram_freq=0, write_graph=True, write_images=True)
-        if opt.num_gpus > 1:
-            model = multi_gpu_model(model, gpus=opt.num_gpus)
+
         model.fit_generator(generator=train_gen,
                             steps_per_epoch=self.steps_per_epoch,
                             epochs=opt.num_epochs,
