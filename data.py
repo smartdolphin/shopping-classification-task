@@ -431,7 +431,6 @@ class Data:
             cate1 = json.loads(open('../cate1.json', 'rb').read().decode('utf-8'))
 
         inv_cate1 = self.get_inverted_cate1(cate1)
-        tpl = '{pid}\t{b}\t{m}\t{s}\t{d}'
 
         meta_path = os.path.join(data_root, 'meta')
         meta = cPickle.loads(open(meta_path, 'rb').read())
@@ -441,7 +440,7 @@ class Data:
             size = h[target]['pid'].shape[0]
             self.logger.info('{} size is {}'.format(data_path, size))
             df = pd.DataFrame(columns=['brand', 'maker', 'model', 'pid', 'price',
-                'product', 'updttm', 'cate', 'cate_kor', 'classes'])
+                'product', 'updttm', 'cate', '1st', '2nd', '3rd', '4th', 'classes'])
 
             for i in tqdm.trange(size):
                 label = self.get_class(data, i)
@@ -456,7 +455,6 @@ class Data:
                 s = inv_cate1['s'][s]
                 d = inv_cate1['d'][d]
                 pid = data['pid'][i].decode('utf-8')
-                kor_label = tpl.format(pid=pid, b=b, m=m, s=s, d=d)
 
                 assert label in meta['y_vocab']
 
@@ -466,9 +464,9 @@ class Data:
                         pid,
                         data['price'][i],
                         data['product'][i].decode('utf-8'),
-                        data['updttm'][i],
+                        data['updttm'][i].decode('utf-8'),
                         label,
-                        kor_label,
+                        b, m, s, d,
                         meta['y_vocab'][label]]
 
             file_name = os.path.basename(data_path)
