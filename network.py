@@ -24,6 +24,7 @@ from keras.layers.core import Reshape
 from keras.layers.embeddings import Embedding
 from keras.layers.core import Dropout, Activation
 
+from metric import fbeta_score_macro
 from misc import get_logger, Option, ModelMGPU
 opt = Option('./config.json')
 
@@ -95,10 +96,12 @@ class TextImage:
         relu = Activation('relu', name='relu1')(embd_out)
         outputs = Dense(num_classes, activation=activation)(relu)
         model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
+        if opt.num_gpus > 1:
+            model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
         model.compile(loss='categorical_crossentropy',
                     optimizer=optm,
-                    metrics=[top1_acc])
+                    metrics=[top1_acc, fbeta_score_macro])
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 
