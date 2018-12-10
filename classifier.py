@@ -151,7 +151,7 @@ class Classifier():
         checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_loss',
                                      save_best_only=True, mode='min', period=opt.num_checkpoint)
 
-        textimg = TextImageNN()
+        textimg = TextImage()
         model = textimg.get_model(self.num_classes)
 
         total_train_samples = train['uni'].shape[0]
