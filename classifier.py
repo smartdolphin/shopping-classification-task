@@ -29,6 +29,7 @@ from keras.models import load_model
 from keras.callbacks import ModelCheckpoint
 from keras.utils.training_utils import multi_gpu_model
 from six.moves import zip, cPickle
+from sklearn.utils import class_weight
 
 from misc import get_logger, Option
 from network import TextOnly, top1_acc, TextImage, TextImagePrice, TextImagePriceNN,\
@@ -128,7 +129,7 @@ class Classifier():
                 pbar.update(X[0].shape[0])
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
-    def train(self, data_root, out_dir, model_name=None):
+    def train(self, data_root, out_dir, use_class_weights=False, model_name=None):
         data_path = os.path.join(data_root, 'data.h5py')
         meta_path = os.path.join(data_root, 'meta')
         data = h5py.File(data_path, 'r')
@@ -170,12 +171,20 @@ class Classifier():
         tb_hist = keras.callbacks.TensorBoard(log_dir='./graph/{0}'.format(model_name),
                 histogram_freq=0, write_graph=True, write_images=True)
 
+        if use_class_weights:
+            label = np.argmax(train['cate'], axis=1)
+            class_weights = class_weight.compute_class_weight('balanced',
+                    np.unique(label), label)
+        else:
+            class_weights = None
+
         model.fit_generator(generator=train_gen,
                             steps_per_epoch=self.steps_per_epoch,
                             epochs=opt.num_epochs,
                             validation_data=dev_gen,
                             validation_steps=self.validation_steps,
                             shuffle=True,
+                            class_weight=class_weights,
                             callbacks=[checkpoint, tb_hist])
 
         model.load_weights(self.weight_fname) # loads from checkout point if exists
