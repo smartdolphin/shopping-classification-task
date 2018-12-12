@@ -148,8 +148,8 @@ class Classifier():
         self.logger.info('# of train samples: %s' % train['cate'].shape[0])
         self.logger.info('# of dev samples: %s' % dev['cate'].shape[0])
 
-        checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_loss',
-                                     save_best_only=True, mode='min', period=opt.num_checkpoint)
+        checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_arena_score',
+                                     save_best_only=True, mode='max', period=opt.num_checkpoint)
 
         # generate vocab matrix
         vocab_mat = np.zeros((len(meta['y_vocab']), 4), dtype=np.int32)
