@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import tensorflow as tf
 
 import keras
@@ -24,7 +23,8 @@ from keras.layers.core import Reshape
 from keras.layers.embeddings import Embedding
 from keras.layers.core import Dropout, Activation
 
-from metric import fbeta_score_macro
+from functools import partial, update_wrapper
+from metric import fbeta_score_macro, arena_score
 from misc import get_logger, Option, ModelMGPU
 opt = Option('./config.json')
 
@@ -68,8 +68,9 @@ class TextOnly:
 
 
 class TextImage:
-    def __init__(self):
+    def __init__(self, vocab_matrix):
         self.logger = get_logger('text_img')
+        self.vocab = vocab_matrix
 
     def get_model(self, num_classes, activation='softmax'):
         max_len = opt.max_len
@@ -99,9 +100,15 @@ class TextImage:
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
+
+        # metric for kakao arena
+        arena_score_metric = update_wrapper(partial(arena_score,
+                                            vocab_matrix=self.vocab),
+                                            arena_score)
+
         model.compile(loss='categorical_crossentropy',
                     optimizer=optm,
-                    metrics=[top1_acc, fbeta_score_macro])
+                    metrics=[top1_acc, fbeta_score_macro, arena_score_metric])
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 

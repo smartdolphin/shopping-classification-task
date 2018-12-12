@@ -151,7 +151,14 @@ class Classifier():
         checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_loss',
                                      save_best_only=True, mode='min', period=opt.num_checkpoint)
 
-        textimg = TextImage()
+        # generate vocab matrix
+        vocab_mat = np.zeros((len(meta['y_vocab']), 4), dtype=np.int32)
+        inv_y_vocab = {v: k for k, v in six.iteritems(meta['y_vocab'])}
+        for k, v in inv_y_vocab.items():
+            item = list(map(int, v.split('>')))
+            vocab_mat[k] = np.array(item).reshape(1, 4)
+
+        textimg = TextImage(vocab_mat)
         model = textimg.get_model(self.num_classes)
 
         total_train_samples = train['uni'].shape[0]
