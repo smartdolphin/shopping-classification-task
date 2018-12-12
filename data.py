@@ -137,6 +137,44 @@ def make_csv_content(data):
         raise Exception("".join(traceback.format_exception(*sys.exc_info())))
 
 
+def csv_worker(data):
+    data, meta, inv_cate1, classes = data
+    try:
+        size = len(data)
+        df = pd.DataFrame(columns=['brand', 'maker', 'model', 'pid', 'price',
+            'product', 'updttm', 'cate', '1st', '2nd', '3rd', '4th', 'classes'])
+
+        for i in tqdm.trange(size):
+            label = classes[i]
+            tkns = list(map(int, label.split('>')))
+            b, m, s, d = tkns
+            assert b in inv_cate1['b']
+            assert m in inv_cate1['m']
+            assert s in inv_cate1['s']
+            assert d in inv_cate1['d']
+            b = inv_cate1['b'][b]
+            m = inv_cate1['m'][m]
+            s = inv_cate1['s'][s]
+            d = inv_cate1['d'][d]
+            pid = data['pid'][i].decode('utf-8')
+
+            assert label in meta['y_vocab']
+
+            df.loc[i] = [data['brand'][i].decode('utf-8'),
+                         data['maker'][i].decode('utf-8'),
+                         data['model'][i].decode('utf-8'),
+                         pid,
+                         data['price'][i],
+                         data['product'][i].decode('utf-8'),
+                         data['updttm'][i].decode('utf-8'),
+                         label,
+                         b, m, s, d,
+                         meta['y_vocab'][label]]
+    except Exception:
+        raise Exception(''.join(traceback.format_exception(*sys.exc_info())))
+    return df
+
+
 class Data:
     y_vocab_path = './data/y_vocab.cPickle' if six.PY2 else './data/y_vocab.py3.cPickle'
     tmp_chunk_tpl = 'tmp/base.chunk.%s'
@@ -438,36 +476,29 @@ class Data:
         with h5py.File(data_path) as h:
             data= h[target]
             size = h[target]['pid'].shape[0]
+            classes = [self.get_class(data, i) for i in range(size)]
             self.logger.info('{} size is {}'.format(data_path, size))
-            df = pd.DataFrame(columns=['brand', 'maker', 'model', 'pid', 'price',
-                'product', 'updttm', 'cate', '1st', '2nd', '3rd', '4th', 'classes'])
+            ndata = [{}] * opt.num_workers
+            work_size = size // opt.num_workers
 
-            for i in tqdm.trange(size):
-                label = self.get_class(data, i)
-                tkns = list(map(int, label.split('>')))
-                b, m, s, d = tkns
-                assert b in inv_cate1['b']
-                assert m in inv_cate1['m']
-                assert s in inv_cate1['s']
-                assert d in inv_cate1['d']
-                b = inv_cate1['b'][b]
-                m = inv_cate1['m'][m]
-                s = inv_cate1['s'][s]
-                d = inv_cate1['d'][d]
-                pid = data['pid'][i].decode('utf-8')
+            offset = 0
+            for n in range(opt.num_workers):
+                for k, v in data.items():
+                    ndata[n][k] = v.value[offset*n:offset*n+work_size]
+                offset += work_size
 
-                assert label in meta['y_vocab']
+            pool = Pool(opt.num_workers)
+            try:
+                rets = pool.map_async(csv_worker,
+                                      [(ndata[n], meta, inv_cate1, classes)
+                                       for n in range(opt.num_workers)]).get(99999999)
+                pool.close()
+                pool.join()
+            except KeyboardInterrupt:
+                pool.terminate()
+                pool.join()
 
-                df.loc[i] = [data['brand'][i].decode('utf-8'),
-                        data['maker'][i].decode('utf-8'),
-                        data['model'][i].decode('utf-8'),
-                        pid,
-                        data['price'][i],
-                        data['product'][i].decode('utf-8'),
-                        data['updttm'][i].decode('utf-8'),
-                        label,
-                        b, m, s, d,
-                        meta['y_vocab'][label]]
+            df = pd.concat(rets)
 
             file_name = os.path.basename(data_path)
             if not os.path.exists(our_dir):
@@ -488,17 +519,8 @@ class Data:
             data_list = cfg_opt.test_data_list
         else:
             raise Exception('unknown target :{}'.format(target))
-        pool = Pool(len(data_list))
-        try:
-            rets = pool.map_async(make_csv_content,
-                                  [(Data, data_root, our_dir, data_path, target)
-                                   for data_path in data_list]).get(99999999)
-            pool.close()
-            pool.join()
-        except KeyboardInterrupt:
-            pool.terminate()
-            pool.join()
-            raise
+
+        rets = [make_csv_content((Data, data_root, our_dir, data_path, target)) for data_path in data_list]
         self.logger.info('{} jobs finish'.format(len(cfg_opt.train_data_list)))
 
 
