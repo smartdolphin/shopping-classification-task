@@ -28,7 +28,7 @@
     "num_checkpoint": 1,
     "embd_size": 128,
     "hidden_size": 1000,
-    "factor_rate": 10,
+    "score_exp": 15,
     "lr": 1e-4,
     "num_epochs": 100,
     "batch_size": 1024,
