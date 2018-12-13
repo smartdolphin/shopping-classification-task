@@ -1,6 +1,14 @@
 {
     "train_data_list": [
-        "../data/train.chunk.01"
+        "../data/train.chunk.01",
+        "../data/train.chunk.02",
+        "../data/train.chunk.03",
+        "../data/train.chunk.04",
+        "../data/train.chunk.05",
+        "../data/train.chunk.06",
+        "../data/train.chunk.07",
+        "../data/train.chunk.08",
+        "../data/train.chunk.09"
     ],
     "dev_data_list": [
         "../data/dev.chunk.01"
@@ -20,6 +28,7 @@
     "num_checkpoint": 1,
     "embd_size": 128,
     "hidden_size": 1000,
+    "factor_rate": 10,
     "lr": 1e-4,
     "num_epochs": 100,
     "batch_size": 1024,

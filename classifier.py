@@ -129,7 +129,7 @@ class Classifier():
                 pbar.update(X[0].shape[0])
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
-    def train(self, data_root, out_dir, use_class_weights=False, model_name=None):
+    def train(self, data_root, out_dir, weight_mode='score_weight', model_name=None):
         data_path = os.path.join(data_root, 'data.h5py')
         meta_path = os.path.join(data_root, 'meta')
         data = h5py.File(data_path, 'r')
@@ -178,10 +178,23 @@ class Classifier():
         tb_hist = keras.callbacks.TensorBoard(log_dir='./graph/{0}'.format(model_name),
                 histogram_freq=0, write_graph=True, write_images=True)
 
-        if use_class_weights:
+        if weight_mode == 'class_weight':
             label = np.argmax(train['cate'], axis=1)
             class_weights = class_weight.compute_class_weight('balanced',
                     np.unique(label), label)
+        elif weight_mode == 'score_weight':
+            class_weights = []
+            for k, v in inv_y_vocab.items():
+                score = sum([0 if d == -1  else s
+                            for d, s  in zip(list(map(int, v.split('>'))),
+                                             [1.0, 1.2, 1.3, 1.4])]) / 4.0 * opt.factor_rate
+                class_weights.append(score)
+            self.logger.info('factor rate: {}'.format(opt.factor_rate))
+            self.logger.info('score weight mean: {}'.format(np.mean(class_weights)))
+            self.logger.info('score weight std: {}'.format(np.std(class_weights)))
+            self.logger.info('score weight min: {}'.format(np.min(class_weights)))
+            self.logger.info('score weight max: {}'.format(np.max(class_weights)))
+            self.logger.info('score weight median: {}'.format(np.median(class_weights)))
         else:
             class_weights = None
 
