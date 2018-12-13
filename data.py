@@ -140,7 +140,7 @@ def make_csv_content(data):
 def csv_worker(data):
     data, meta, inv_cate1, classes = data
     try:
-        size = len(data)
+        size = len(data['pid'])
         df = pd.DataFrame(columns=['brand', 'maker', 'model', 'pid', 'price',
             'product', 'updttm', 'cate', '1st', '2nd', '3rd', '4th', 'classes'])
 
@@ -482,9 +482,9 @@ class Data:
             work_size = size // opt.num_workers
 
             offset = 0
-            for n in range(opt.num_workers):
+            for n in tqdm.trange(opt.num_workers):
                 for k, v in data.items():
-                    ndata[n][k] = v.value[offset*n:offset*n+work_size]
+                    ndata[n][k] = v.value[offset:offset+work_size if n < opt.num_workers - 1 else size]
                 offset += work_size
 
             pool = Pool(opt.num_workers)
