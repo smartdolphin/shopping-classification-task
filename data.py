@@ -469,6 +469,7 @@ class Data:
             cate1 = json.loads(open('../cate1.json', 'rb').read().decode('utf-8'))
 
         inv_cate1 = self.get_inverted_cate1(cate1)
+        del cate1
 
         meta_path = os.path.join(data_root, 'meta')
         meta = cPickle.loads(open(meta_path, 'rb').read())
@@ -498,16 +499,18 @@ class Data:
                 pool.terminate()
                 pool.join()
 
-            df = pd.concat(rets)
+        del ndata, meta, inv_cate1, classes
+        df = pd.concat(rets)
+        del rets
 
-            file_name = os.path.basename(data_path)
-            if not os.path.exists(our_dir):
-                os.makedirs(our_dir, exist_ok=True)
-            csv_name = file_name.split('.')[0]
-            csv_num = file_name.split('.')[2]
-            csv_file_path = os.path.join(our_dir, '{}_{}.csv'.format(csv_name, csv_num))
-            df.to_csv(csv_file_path)
-            self.logger.info('{} is saved'.format(csv_file_path))
+        file_name = os.path.basename(data_path)
+        if not os.path.exists(our_dir):
+            os.makedirs(our_dir, exist_ok=True)
+        csv_name = file_name.split('.')[0]
+        csv_num = file_name.split('.')[2]
+        csv_file_path = os.path.join(our_dir, '{}_{}.csv'.format(csv_name, csv_num))
+        df.to_csv(csv_file_path)
+        self.logger.info('{} is saved'.format(csv_file_path))
 
     def make_csv(self, data_root, our_dir, target='train', config_path='./config.json'):
         cfg_opt = Option(config_path)
