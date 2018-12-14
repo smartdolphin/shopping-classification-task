@@ -190,7 +190,7 @@ class Classifier():
                                              [1.0, 1.2, 1.3, 1.4])]) / 4.0
                 class_weights.append(score)
             class_weights = list(np.power(class_weights, opt.score_exp))
-            self.logger.info('factor rate: {}'.format(opt.factor_rate))
+            self.logger.info('score exp: {}'.format(opt.score_exp))
             self.logger.info('score weight mean: {}'.format(np.mean(class_weights)))
             self.logger.info('score weight std: {}'.format(np.std(class_weights)))
             self.logger.info('score weight min: {}'.format(np.min(class_weights)))
