@@ -179,23 +179,33 @@ class Classifier():
                 histogram_freq=0, write_graph=True, write_images=True)
 
         if weight_mode == 'class_weight':
-            label = np.argmax(train['cate'], axis=1)
-            class_weights = class_weight.compute_class_weight('balanced',
+            label = list(np.argmax(train['cate'], axis=1)) + list(np.argmax(dev['cate'], axis=1))
+            weights = class_weight.compute_class_weight('balanced',
                     np.unique(label), label)
+            self.logger.info('class weight length: {}'.format(len(weights)))
+            self.logger.info('class weight mean: {}'.format(np.mean(weights)))
+            self.logger.info('class weight std: {}'.format(np.std(weights)))
+            self.logger.info('class weight min: {}'.format(np.min(weights)))
+            self.logger.info('class weight max: {}'.format(np.max(weights)))
+            self.logger.info('class weight median: {}'.format(np.median(weights)))
+            class_weights = {k : v for k, v in zip(np.unique(label), weights)}
         elif weight_mode == 'score_weight':
-            class_weights = []
+            label, class_weights = [], []
             for k, v in inv_y_vocab.items():
                 score = sum([0 if d == -1  else s
                             for d, s  in zip(list(map(int, v.split('>'))),
                                              [1.0, 1.2, 1.3, 1.4])]) / 4.0
+                label.append(k)
                 class_weights.append(score)
             class_weights = list(np.power(class_weights, opt.score_exp))
             self.logger.info('score exp: {}'.format(opt.score_exp))
+            self.logger.info('score weight length: {}'.format(len(class_weights)))
             self.logger.info('score weight mean: {}'.format(np.mean(class_weights)))
             self.logger.info('score weight std: {}'.format(np.std(class_weights)))
             self.logger.info('score weight min: {}'.format(np.min(class_weights)))
             self.logger.info('score weight max: {}'.format(np.max(class_weights)))
             self.logger.info('score weight median: {}'.format(np.median(class_weights)))
+            class_weights = {k : v for k, v in zip(label, class_weights)}
         else:
             class_weights = None
 
