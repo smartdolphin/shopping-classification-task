@@ -260,6 +260,7 @@ class Data:
         product = h['product'][i]
         if six.PY3:
             product = product.decode('utf-8')
+        product = self.filter_func(product)
         product = re_sc.sub(' ', product).strip().split()
         words = [w.strip() for w in product]
         words = [w for w in words
@@ -283,6 +284,14 @@ class Data:
         # price feature
         price = h['price'][i]
         return Y, (x, v, img, price)
+
+    def filter_func(self, sentence):
+        with open(opt.filter_path, 'r') as f:
+            for line in f.readlines():
+                filter_word = line.strip()
+                if filter_word in sentence:
+                    sentence = sentence.replace(filter_word, '').strip()
+        return sentence
 
     def create_dataset(self, g, size, num_classes):
         shape = (size, opt.max_len)
