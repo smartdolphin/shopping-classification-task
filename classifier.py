@@ -189,6 +189,7 @@ class Classifier():
             self.logger.info('class weight max: {}'.format(np.max(weights)))
             self.logger.info('class weight median: {}'.format(np.median(weights)))
             class_weights = {k : v for k, v in zip(np.unique(label), weights)}
+            sample_weights = None
         elif weight_mode == 'score_weight':
             label, class_weights = [], []
             for k, v in inv_y_vocab.items():
@@ -206,8 +207,29 @@ class Classifier():
             self.logger.info('score weight max: {}'.format(np.max(class_weights)))
             self.logger.info('score weight median: {}'.format(np.median(class_weights)))
             class_weights = {k : v for k, v in zip(label, class_weights)}
+            sample_weights = None
+        elif weight_mode == 'sample_weight':
+            class_weights = None
+            sample_weights = []
+            label = list(np.argmax(train['cate'], axis=1))
+
+            for k in label:
+                v = inv_y_vocab[k]
+                score = sum([0 if d == -1  else s
+                            for d, s  in zip(list(map(int, v.split('>'))),
+                                             [1.0, 1.2, 1.3, 1.4])]) / 4.0
+                sample_weights.append(score)
+            sample_weights = list(np.power(sample_weights, opt.score_exp))
+            self.logger.info('score exp: {}'.format(opt.score_exp))
+            self.logger.info('score weight length: {}'.format(len(sample_weights)))
+            self.logger.info('score weight mean: {}'.format(np.mean(sample_weights)))
+            self.logger.info('score weight std: {}'.format(np.std(sample_weights)))
+            self.logger.info('score weight min: {}'.format(np.min(sample_weights)))
+            self.logger.info('score weight max: {}'.format(np.max(sample_weights)))
+            self.logger.info('score weight median: {}'.format(np.median(sample_weights)))
         else:
             class_weights = None
+            sample_weights = None
 
         model.fit_generator(generator=train_gen,
                             steps_per_epoch=self.steps_per_epoch,
@@ -215,6 +237,7 @@ class Classifier():
                             validation_data=dev_gen,
                             validation_steps=self.validation_steps,
                             shuffle=True,
+                            sample_weight=sample_weights,
                             class_weight=class_weights,
                             callbacks=[checkpoint, tb_hist])
 
