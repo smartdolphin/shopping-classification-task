@@ -286,11 +286,12 @@ class Data:
         return Y, (x, v, img, price)
 
     def filter_func(self, sentence):
-        with open(opt.filter_path, 'r') as f:
-            for line in f.readlines():
-                filter_word = line.strip()
-                if filter_word in sentence:
-                    sentence = sentence.replace(filter_word, '').strip()
+        if os.path.exists(opt.filter_path):
+            with open(opt.filter_path, 'r') as f:
+                for line in f.readlines():
+                    filter_word = line.strip()
+                    if filter_word in sentence:
+                        sentence = sentence.replace(filter_word, '').strip()
         return sentence
 
     def create_dataset(self, g, size, num_classes):
