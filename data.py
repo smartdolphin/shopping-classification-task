@@ -29,6 +29,7 @@ import numpy as np
 import mmh3
 import six
 from keras.utils.np_utils import to_categorical
+from kor_char_parser import decompose_str_as_one_hot
 from six.moves import cPickle
 
 from misc import get_logger, Option
@@ -268,21 +269,28 @@ class Data:
         if not words:
             return [None] * 2
 
-        hash_func = hash if six.PY2 else lambda x: mmh3.hash(x, seed=17)
-        x = [hash_func(w) % opt.unigram_hash_size + 1 for w in words]
-        xv = Counter(x).most_common(opt.max_len)
+        if opt.data_mode == 'seq':
+            xv = decompose_str_as_one_hot(''.join(words))[:opt.max_len]
+        else:
+            hash_func = hash if six.PY2 else lambda x: mmh3.hash(x, seed=17)
+            x = [hash_func(w) % opt.unigram_hash_size + 1 for w in words]
+            xv = Counter(x).most_common(opt.max_len)
 
         x = np.zeros(opt.max_len, dtype=np.float32)
         v = np.zeros(opt.max_len, dtype=np.int32)
         for i in range(len(xv)):
-            x[i] = xv[i][0]
-            v[i] = xv[i][1]
+            if opt.data_mode == 'seq':
+                x[i] = xv[i]
+            else:
+                x[i] = xv[i][0]
+                v[i] = xv[i][1]
 
         # image feature
         img = h['img_feat'][i]
 
         # price feature
-        price = h['price'][i]
+        price = -1 if opt.mode == 'seq' else h['price'][i]
+
         return Y, (x, v, img, price)
 
     def filter_func(self, sentence):
