@@ -68,7 +68,7 @@ class TextOnly:
 
 
 class TextImage:
-    def __init__(self, vocab_matrix):
+    def __init__(self, vocab_matrix=None):
         self.logger = get_logger('text_img')
         self.vocab = vocab_matrix
 

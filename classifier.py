@@ -41,7 +41,7 @@ if six.PY2:
     cate1 = json.loads(open('../cate1.json').read())
 else:
     cate1 = json.loads(open('../cate1.json', 'rb').read().decode('utf-8'))
-DEV_DATA_LIST = ['../dev.chunk.01']
+DEV_DATA_LIST = ['../data/dev.chunk.01']
 
 
 class Classifier():
@@ -104,14 +104,21 @@ class Classifier():
                 fout.write(ans)
                 fout.write('\n')
 
-    def predict(self, data_root, model_root, test_root, test_div, out_path, readable=False):
+    def predict(self, data_root, model_root, test_root, test_div, out_path, readable=False, mode='h5'):
         meta_path = os.path.join(data_root, 'meta')
         meta = cPickle.loads(open(meta_path, 'rb').read())
 
         model_fname = os.path.join(model_root, 'model.h5')
         self.logger.info('# of classes(train): %s' % len(meta['y_vocab']))
-        model = load_model(model_fname,
-                           custom_objects={'top1_acc': top1_acc})
+        if mode == 'h5':
+            model = load_model(model_fname,
+                               custom_objects={'top1_acc': top1_acc})
+        elif mode == 'weights':
+            textimg = TextImage()
+            model = textimg.get_model(len(meta['y_vocab']))
+            model.load_weights(os.path.join(model_root, 'weights'))
+        else:
+            raise Exception('Unknown mode: {}'.format(mode))
         K.set_learning_phase(0)
 
         test_path = os.path.join(test_root, 'data.h5py')
