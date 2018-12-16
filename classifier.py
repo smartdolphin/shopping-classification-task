@@ -194,7 +194,7 @@ class Classifier():
             for k, v in inv_y_vocab.items():
                 score = sum([0 if d == -1  else s
                             for d, s  in zip(list(map(int, v.split('>'))),
-                                             [1.0, 1.2, 1.3, 1.4])]) / 4.0
+                                             [1.0, 1.2, 1.3, 1.4])]) / 4.0 + 0.75
                 label.append(k)
                 class_weights.append(score)
             class_weights = list(np.power(class_weights, opt.score_exp))
