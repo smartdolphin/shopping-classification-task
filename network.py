@@ -17,7 +17,7 @@ import tensorflow as tf
 import keras
 from keras.models import Model
 from keras.layers.merge import dot
-from keras.layers import Dense, Input, concatenate
+from keras.layers import Dense, Input, concatenate, BatchNormalization
 from keras.layers.core import Reshape
 
 from keras.layers.embeddings import Embedding
@@ -93,7 +93,7 @@ class TextImage:
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
         img_feat = Reshape((opt.img_size, ))(img)
         pair = concatenate([uni_embd, img_feat])
-        embd_out = Dropout(rate=0.5)(pair)
+        embd_out = BatchNormalization()(pair)
         relu = Activation('relu', name='relu1')(embd_out)
         outputs = Dense(num_classes, activation=activation)(relu)
         model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)

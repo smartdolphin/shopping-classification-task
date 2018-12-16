@@ -23,6 +23,7 @@ import tqdm
 import numpy as np
 import six
 import keras
+import keras.backend as K
 
 from datetime import datetime
 from keras.models import load_model
@@ -111,6 +112,7 @@ class Classifier():
         self.logger.info('# of classes(train): %s' % len(meta['y_vocab']))
         model = load_model(model_fname,
                            custom_objects={'top1_acc': top1_acc})
+        K.set_learning_phase(0)
 
         test_path = os.path.join(test_root, 'data.h5py')
         test_data = h5py.File(test_path, 'r')
