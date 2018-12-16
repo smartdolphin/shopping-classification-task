@@ -270,7 +270,9 @@ class Data:
             return [None] * 2
 
         if opt.data_mode == 'seq':
-            xv = decompose_str_as_one_hot(''.join(words))[:opt.max_len]
+            x = [hash(w) % opt.unigram_hash_size + 1 for w in words]
+            xv = Counter(x).most_common(opt.max_len)
+            ch = decompose_str_as_one_hot(''.join(words))[:opt.max_len]
         else:
             hash_func = hash if six.PY2 else lambda x: mmh3.hash(x, seed=17)
             x = [hash_func(w) % opt.unigram_hash_size + 1 for w in words]
@@ -278,9 +280,12 @@ class Data:
 
         x = np.zeros(opt.max_len, dtype=np.float32)
         v = np.zeros(opt.max_len, dtype=np.int32)
+        c = np.zeros(opt.max_len, dtype=np.float32)
         for i in range(len(xv)):
             if opt.data_mode == 'seq':
-                x[i] = xv[i]
+                x[i] = xv[i][0]
+                v[i] = xv[i][1]
+                c[i] = ch[i]
             else:
                 x[i] = xv[i][0]
                 v[i] = xv[i][1]
@@ -291,7 +296,7 @@ class Data:
         # price feature
         price = -1 if opt.mode == 'seq' else h['price'][i]
 
-        return Y, (x, v, img, price)
+        return Y, (x, v, c, img, price)
 
     def filter_func(self, sentence):
         if os.path.exists(opt.filter_path):
@@ -307,6 +312,7 @@ class Data:
         img_shape = (size, opt.img_size)
         g.create_dataset('uni', shape, chunks=True, dtype=np.int32)
         g.create_dataset('w_uni', shape, chunks=True, dtype=np.float32)
+        g.create_dataset('char', shape, chunks=True, dtype=np.float32)
         g.create_dataset('img', img_shape, chunks=True, dtype=np.float32)
         g.create_dataset('price', (size, 1), chunks=True, dtype=np.int32)
         g.create_dataset('cate', (size, num_classes), chunks=True, dtype=np.int32)
@@ -319,6 +325,7 @@ class Data:
         chunk = {}
         chunk['uni'] = np.zeros(shape=chunk_shape, dtype=np.int32)
         chunk['w_uni'] = np.zeros(shape=chunk_shape, dtype=np.float32)
+        chunk['char'] = np.zeros(shape=chunk_shape, dtype=np.float32)
         chunk['img'] = np.zeros(shape=img_shape, dtype=np.float32)
         chunk['price'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
         chunk['cate'] = np.zeros(shape=(chunk_size, num_classes), dtype=np.int32)
@@ -330,6 +337,7 @@ class Data:
         num = chunk['num']
         dataset['uni'][offset:offset + num, :] = chunk['uni'][:num]
         dataset['w_uni'][offset:offset + num, :] = chunk['w_uni'][:num]
+        dataset['char'][offset:offset + num, :] = chunk['char'][:num]
         dataset['img'][offset:offset + num, :] = chunk['img'][:num]
         dataset['price'][offset:offset + num, :] = chunk['price'][:num]
         dataset['cate'][offset:offset + num] = chunk['cate'][:num]
@@ -341,6 +349,7 @@ class Data:
         y_num = B['cate'].shape[1]
         A['uni'][offset:offset + num, :] = B['uni'][:num]
         A['w_uni'][offset:offset + num, :] = B['w_uni'][:num]
+        A['char'][offset:offset + num, :] = B['char'][:num]
         A['img'][offset:offset + num, :] = B['img'][:num]
         A['price'][offset:offset + num, :] = B['price'][:num]
         A['cate'][offset:offset + num, y_offset:y_offset + y_num] = B['cate'][:num]
@@ -416,7 +425,7 @@ class Data:
             for data_idx, (pid, y, vw) in data:
                 if y is None:
                     continue
-                v, w, img, price = vw
+                v, w, c, img, price = vw
                 is_train = train_indices[sample_idx + data_idx]
                 if all_dev:
                     is_train = False
@@ -428,6 +437,7 @@ class Data:
                 idx = c['num']
                 c['uni'][idx] = v
                 c['w_uni'][idx] = w
+                c['char'][idx] = c
                 c['img'][idx] = img
                 c['price'][idx] = price
                 c['cate'][idx] = y
@@ -453,6 +463,7 @@ class Data:
             shape = (size, opt.max_len)
             ds['uni'].resize(shape)
             ds['w_uni'].resize(shape)
+            ds['char'].resize(shape)
             ds['cate'].resize((size, len(self.y_vocab)))
 
         data_fout.close()
