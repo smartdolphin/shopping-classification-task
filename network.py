@@ -100,15 +100,17 @@ class TextImage:
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
+        metrics = [top1_acc, fbeta_score_macro]
 
         # metric for kakao arena
         arena_score_metric = update_wrapper(partial(arena_score,
                                             vocab_matrix=self.vocab),
                                             arena_score)
+        metrics += [arena_score_metric] if self.vocab else []
 
         model.compile(loss='categorical_crossentropy',
                     optimizer=optm,
-                    metrics=[top1_acc, fbeta_score_macro, arena_score_metric])
+                    metrics=metrics)
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 
