@@ -425,7 +425,7 @@ class Data:
             for data_idx, (pid, y, vw) in data:
                 if y is None:
                     continue
-                v, w, c, img, price = vw
+                v, w, ch, img, price = vw
                 is_train = train_indices[sample_idx + data_idx]
                 if all_dev:
                     is_train = False
@@ -437,7 +437,7 @@ class Data:
                 idx = c['num']
                 c['uni'][idx] = v
                 c['w_uni'][idx] = w
-                c['char'][idx] = c
+                c['char'][idx] = ch
                 c['img'][idx] = img
                 c['price'][idx] = price
                 c['cate'][idx] = y
