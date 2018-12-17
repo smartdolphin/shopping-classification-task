@@ -301,7 +301,7 @@ class Data:
 
     def filter_func(self, sentence):
         if os.path.exists(opt.filter_path):
-            with open(opt.filter_path, 'r') as f:
+            with open(opt.filter_path, 'r', encoding='utf-8') as f:
                 for line in f.readlines():
                     filter_word = line.strip()
                     if filter_word in sentence:
