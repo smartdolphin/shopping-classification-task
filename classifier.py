@@ -28,7 +28,6 @@ import keras.backend as K
 from datetime import datetime
 from keras.models import load_model
 from keras.callbacks import ModelCheckpoint
-from keras.utils.training_utils import multi_gpu_model
 from six.moves import zip, cPickle
 from sklearn.utils import class_weight
 
