@@ -106,7 +106,7 @@ class TextImage:
         arena_score_metric = update_wrapper(partial(arena_score,
                                             vocab_matrix=self.vocab),
                                             arena_score)
-        metrics += [arena_score_metric] if self.vocab else []
+        metrics += [arena_score_metric] if self.vocab is not None else []
 
         model.compile(loss='categorical_crossentropy',
                     optimizer=optm,
