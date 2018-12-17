@@ -87,7 +87,7 @@ def decompose_as_one_hot(in_char, warning=True):
             result = hangul_length + 128 + 51 + 2  # ★
         elif in_char == ord('☆'):
             result = hangul_length + 128 + 51 + 3  # ☆
-        elif 0x3040 <= in_char <= 0x309F: 
+        elif 0x3040 <= in_char <= 0x309F:
             # 히라가나
             offset = in_char - 0x3040
             result = hangul_length + 128 + 51 + 4 + offset
@@ -103,8 +103,7 @@ def decompose_as_one_hot(in_char, warning=True):
             if warning:
                 print('Unhandled character:', chr(in_char), in_char)
             # unknown character
-            result = hangul_length + 128 + 51 + 4 + 0x5F + 0x5F + 0x51FF + 1  # for unknown character
-
+            result = 0
         return [result]
 
 
