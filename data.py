@@ -270,7 +270,8 @@ class Data:
             return [None] * 2
 
         if opt.data_mode == 'seq':
-            x = [hash(w) % opt.unigram_hash_size + 1 for w in words]
+            hash_func = hash if six.PY2 else lambda x: mmh3.hash(x, seed=17)
+            x = [hash_func(w) % opt.unigram_hash_size + 1 for w in words]
             xv = Counter(x).most_common(opt.max_len)
             ch = decompose_str_as_one_hot(''.join(words))[:opt.max_len]
         else:
