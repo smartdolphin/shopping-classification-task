@@ -22,9 +22,9 @@ from six.moves import zip, cPickle
 
 def evaluate(predict_path, data_path, div, y_vocab_path):
     h = h5py.File(data_path, 'r')[div]
-    y_vocab = cPickle.loads(open(y_vocab_path).read())
+    y_vocab = cPickle.loads(open(y_vocab_path, 'rb').read())
     inv_y_vocab = {v: k for k, v in six.iteritems(y_vocab)}
-    fin = open(predict_path, 'rb')
+    fin = open(predict_path, 'r')
     hit, n = defaultdict(lambda: 0), defaultdict(lambda: 0)
     print('loading ground-truth...')
     CATE = np.argmax(h['cate'], axis=1)
