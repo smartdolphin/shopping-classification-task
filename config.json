@@ -18,7 +18,7 @@
         "../data/test.chunk.02"
     ],
     "filter_path": "filter.txt",
-    "unigram_hash_size": 100000,
+    "unigram_hash_size": 100003,
     "min_word_length": 2,
     "max_word_length": 31,
     "max_len": 32,
