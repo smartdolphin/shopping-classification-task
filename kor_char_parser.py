@@ -101,7 +101,8 @@ def decompose_as_one_hot(in_char, warning=True):
             result = hangul_length + 128 + 51 + 4 + 0x5F + 0x5F + offset
         else:
             if warning:
-                print('Unhandled character:', chr(in_char), in_char)
+                print('Unhandled character:', chr(in_char), in_char,
+                        file=open(1, 'w', encoding='utf-8', closefd=False))
             # unknown character
             result = 0
         return [result]
