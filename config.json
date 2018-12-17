@@ -30,9 +30,10 @@
     "embd_size": 128,
     "hidden_size": 1000,
     "score_exp": 2,
+    "data_mode": "seq",
     "lr": 1e-4,
     "num_epochs": 100,
-    "batch_size": 10240,
+    "batch_size": 30720,
     "img_size": 2048,
     "num_gpus": 4
 }
