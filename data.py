@@ -182,6 +182,12 @@ class Data:
 
     def __init__(self):
         self.logger = get_logger('data')
+        self.cate_size = {'b': 57, 'm': 552, 's': 3190, 'd': 404}
+        self.filter_words = set()
+        if os.path.exists(opt.filter_path):
+            with open(opt.filter_path, 'r', encoding='utf-8') as f:
+                for line in f.readlines():
+                    self.filter_words.add(line.strip())
 
     def load_y_vocab(self):
         self.y_vocab = cPickle.loads(open(self.y_vocab_path, 'rb').read())
@@ -199,6 +205,7 @@ class Data:
                 for k in six.iterkeys(_y_vocab):
                     y_vocab.add(k)
             self.y_vocab = {y: idx for idx, y in enumerate(y_vocab)}
+            self.inv_y_vocab = {v: k for k, v in six.iteritems(self.y_vocab)}
         except KeyboardInterrupt:
             pool.terminate()
             pool.join()
@@ -221,10 +228,10 @@ class Data:
         reader = Reader(data_path_list, div, begin_offset, end_offset)
         rets = []
         for pid, label, h, i in reader.generate():
-            y, x = self.parse_data(label, h, i)
+            y, y_cate, x = self.parse_data(label, h, i)
             if y is None:
                 continue
-            rets.append((pid, y, x))
+            rets.append((pid, y, y_cate, x))
         self.logger.info('sz=%s' % (len(rets)))
         open(out_path, 'wb').write(cPickle.dumps(rets, 2))
         self.logger.info('%s ~ %s done. (size: %s)' % (begin_offset, end_offset, end_offset - begin_offset))
@@ -251,12 +258,12 @@ class Data:
         return num_chunks
 
     def parse_data(self, label, h, i):
-        Y = self.y_vocab.get(label)
-        if Y is None and self.div in ['dev', 'test']:
-            Y = 0
-        if Y is None and self.div != 'test':
-            return [None] * 2
-        Y = to_categorical(Y, len(self.y_vocab))
+        y_val = self.y_vocab.get(label)
+        if y_val is None and self.div in ['dev', 'test']:
+            y_val = 0
+        if y_val is None and self.div != 'test':
+            return [None] * 3
+        Y = to_categorical(y_val, len(self.y_vocab))
 
         product = h['product'][i]
         if six.PY3:
@@ -267,7 +274,7 @@ class Data:
         words = [w for w in words
                  if len(w) >= opt.min_word_length and len(w) < opt.max_word_length]
         if not words:
-            return [None] * 2
+            return [None] * 3
 
         if opt.data_mode == 'seq':
             hash_func = hash if six.PY2 else lambda x: mmh3.hash(x, seed=17)
@@ -297,15 +304,19 @@ class Data:
         # price feature
         price = -1 if opt.mode == 'seq' else h['price'][i]
 
-        return Y, (x, v, c, img, price)
+        # set multi y for each category
+        cate_y = {}
+        tkns = list(map(int, label.split('>')))
+        for cate, c_label in zip(['b', 'm', 's', 'd'], tkns):
+            cate_y[cate] = 0 if c_label == -1 else c_label - 1
+            cate_y['{}_cate'.format(cate)] = to_categorical(cate_y[cate], self.cate_size[cate])
+
+        return Y, cate_y, (x, v, c, img, price)
 
     def filter_func(self, sentence):
-        if os.path.exists(opt.filter_path):
-            with open(opt.filter_path, 'r', encoding='utf-8') as f:
-                for line in f.readlines():
-                    filter_word = line.strip()
-                    if filter_word in sentence:
-                        sentence = sentence.replace(filter_word, '').strip()
+        for filter_str in self.filter_words:
+            if filter_str in sentence:
+                sentence = sentence.replace(filter_str, '').strip()
         return sentence
 
     def create_dataset(self, g, size, num_classes):
@@ -317,6 +328,14 @@ class Data:
         g.create_dataset('img', img_shape, chunks=True, dtype=np.float32)
         g.create_dataset('price', (size, 1), chunks=True, dtype=np.int32)
         g.create_dataset('cate', (size, num_classes), chunks=True, dtype=np.int32)
+        g.create_dataset('b', (size, 1), chunks=True, dtype=np.int32)
+        g.create_dataset('m', (size, 1), chunks=True, dtype=np.int32)
+        g.create_dataset('s', (size, 1), chunks=True, dtype=np.int32)
+        g.create_dataset('d', (size, 1), chunks=True, dtype=np.int32)
+        g.create_dataset('b_cate', (size, self.cate_size['b']), chunks=True, dtype=np.int32)
+        g.create_dataset('m_cate', (size, self.cate_size['m']), chunks=True, dtype=np.int32)
+        g.create_dataset('s_cate', (size, self.cate_size['s']), chunks=True, dtype=np.int32)
+        g.create_dataset('d_cate', (size, self.cate_size['d']), chunks=True, dtype=np.int32)
         g.create_dataset('pid', (size,), chunks=True, dtype='S12')
 
     def init_chunk(self, chunk_size, num_classes):
@@ -330,6 +349,14 @@ class Data:
         chunk['img'] = np.zeros(shape=img_shape, dtype=np.float32)
         chunk['price'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
         chunk['cate'] = np.zeros(shape=(chunk_size, num_classes), dtype=np.int32)
+        chunk['b'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
+        chunk['m'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
+        chunk['s'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
+        chunk['d'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
+        chunk['b_cate'] = np.zeros(shape=(chunk_size, self.cate_size['b']), dtype=np.int32)
+        chunk['m_cate'] = np.zeros(shape=(chunk_size, self.cate_size['m']), dtype=np.int32)
+        chunk['s_cate'] = np.zeros(shape=(chunk_size, self.cate_size['s']), dtype=np.int32)
+        chunk['d_cate'] = np.zeros(shape=(chunk_size, self.cate_size['d']), dtype=np.int32)
         chunk['pid'] = []
         chunk['num'] = 0
         return chunk
@@ -342,6 +369,14 @@ class Data:
         dataset['img'][offset:offset + num, :] = chunk['img'][:num]
         dataset['price'][offset:offset + num, :] = chunk['price'][:num]
         dataset['cate'][offset:offset + num] = chunk['cate'][:num]
+        dataset['b'][offset:offset + num] = chunk['b'][:num]
+        dataset['m'][offset:offset + num] = chunk['m'][:num]
+        dataset['s'][offset:offset + num] = chunk['s'][:num]
+        dataset['d'][offset:offset + num] = chunk['d'][:num]
+        dataset['b_cate'][offset:offset + num] = chunk['b_cate'][:num]
+        dataset['m_cate'][offset:offset + num] = chunk['m_cate'][:num]
+        dataset['s_cate'][offset:offset + num] = chunk['s_cate'][:num]
+        dataset['d_cate'][offset:offset + num] = chunk['d_cate'][:num]
         if with_pid_field:
             dataset['pid'][offset:offset + num] = chunk['pid'][:num]
 
@@ -354,6 +389,14 @@ class Data:
         A['img'][offset:offset + num, :] = B['img'][:num]
         A['price'][offset:offset + num, :] = B['price'][:num]
         A['cate'][offset:offset + num, y_offset:y_offset + y_num] = B['cate'][:num]
+        A['b'][offset:offset + num, y_offset:y_offset + y_num] = B['b'][:num]
+        A['m'][offset:offset + num, y_offset:y_offset + y_num] = B['m'][:num]
+        A['s'][offset:offset + num, y_offset:y_offset + y_num] = B['s'][:num]
+        A['d'][offset:offset + num, y_offset:y_offset + y_num] = B['d'][:num]
+        A['b_cate'][offset:offset + num, y_offset:y_offset + y_num] = B['b_cate'][:num]
+        A['m_cate'][offset:offset + num, y_offset:y_offset + y_num] = B['m_cate'][:num]
+        A['s_cate'][offset:offset + num, y_offset:y_offset + y_num] = B['s_cate'][:num]
+        A['d_cate'][offset:offset + num, y_offset:y_offset + y_num] = B['d_cate'][:num]
         if with_pid_field:
             A['pid'][offset:offset + num] = B['pid'][:num]
 
@@ -423,7 +466,7 @@ class Data:
             self.logger.info('processing %s ...' % path)
             data = list(enumerate(cPickle.loads(open(path, 'rb').read())))
             np.random.shuffle(data)
-            for data_idx, (pid, y, vw) in data:
+            for data_idx, (pid, y, y_cate, vw) in data:
                 if y is None:
                     continue
                 v, w, ch, img, price = vw
@@ -442,6 +485,14 @@ class Data:
                 c['img'][idx] = img
                 c['price'][idx] = price
                 c['cate'][idx] = y
+                c['b'][idx] = y_cate['b']
+                c['m'][idx] = y_cate['m']
+                c['s'][idx] = y_cate['s']
+                c['d'][idx] = y_cate['d']
+                c['b_cate'][idx] = y_cate['b_cate']
+                c['m_cate'][idx] = y_cate['m_cate']
+                c['s_cate'][idx] = y_cate['s_cate']
+                c['d_cate'][idx] = y_cate['d_cate']
                 c['num'] += 1
                 if not is_train:
                     c['pid'].append(np.string_(pid))
@@ -466,6 +517,10 @@ class Data:
             ds['w_uni'].resize(shape)
             ds['char'].resize(shape)
             ds['cate'].resize((size, len(self.y_vocab)))
+            ds['b_cate'].resize((size, self.cate_size['b']))
+            ds['m_cate'].resize((size, self.cate_size['m']))
+            ds['s_cate'].resize((size, self.cate_size['s']))
+            ds['d_cate'].resize((size, self.cate_size['d']))
 
         data_fout.close()
         meta = {'y_vocab': self.y_vocab}

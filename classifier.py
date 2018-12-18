@@ -52,8 +52,21 @@ class Classifier():
         left, limit = 0, ds['uni'].shape[0]
         while True:
             right = min(left + batch_size, limit)
-            X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
-            Y = ds['cate'][left:right]
+
+            if opt.multi_label is True:
+                b = ds['b'][left:right, :]
+                m = ds['m'][left:right, :]
+                s = ds['s'][left:right, :]
+
+                X = [ds[t][left:right, :] for t in ['uni', 'w_uni']]
+                X += [b, m, s]
+                Y = [ds['b_cate'][left:right],
+                     ds['m_cate'][left:right],
+                     ds['s_cate'][left:right],
+                     ds['d_cate'][left:right]]
+            else:
+                X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
+                Y = ds['cate'][left:right]
             yield X, Y
             left = right
             if right == limit:
