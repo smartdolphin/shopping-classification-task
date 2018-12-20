@@ -115,6 +115,155 @@ class TextImage:
         return model
 
 
+class TextB:
+    def __init__(self, vocab_matrix=None):
+        self.logger = get_logger('text_b')
+        self.vocab = vocab_matrix
+
+    def get_model(self, num_classes, activation='softmax'):
+        max_len = opt.max_len
+        voca_size = opt.unigram_hash_size + 1
+
+        embd = Embedding(voca_size,
+                         opt.embd_size,
+                         name='uni_embd')
+
+        t_uni = Input((max_len,), name="input_1")
+        t_uni_embd = embd(t_uni)  # token
+
+        w_uni = Input((max_len,), name="input_2")
+        w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
+
+
+        uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
+        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
+        embd_out = Dropout(rate=0.5)(uni_embd)
+        relu = Activation('relu', name='relu1')(embd_out)
+        outputs = Dense(num_classes, activation=activation)(relu)
+        model = Model(inputs=[t_uni, w_uni], outputs=outputs)
+        if opt.num_gpus > 1:
+            model = ModelMGPU(model, gpus=opt.num_gpus)
+        optm = keras.optimizers.Nadam(opt.lr)
+        metrics = [top1_acc, fbeta_score_macro]
+
+        # metric for kakao arena
+        arena_score_metric = update_wrapper(partial(arena_score,
+                                            vocab_matrix=self.vocab),
+                                            arena_score)
+        metrics += [arena_score_metric] if self.vocab is not None else []
+
+        model.compile(loss='categorical_crossentropy',
+                    optimizer=optm,
+                    metrics=metrics)
+        model.summary(print_fn=lambda x: self.logger.info(x))
+        return model
+
+
+class TextM:
+    def __init__(self, vocab_matrix=None):
+        self.logger = get_logger('text_m')
+        self.vocab = vocab_matrix
+
+    def get_model(self, num_classes, activation='softmax'):
+        max_len = opt.max_len
+        voca_size = opt.unigram_hash_size + 1
+
+        embd = Embedding(voca_size,
+                         opt.embd_size,
+                         name='uni_embd')
+
+        t_uni = Input((max_len,), name="input_1")
+        t_uni_embd = embd(t_uni)  # token
+
+        w_uni = Input((max_len,), name="input_2")
+        w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
+
+        b_in = Input((1,), name="input_b")
+
+        uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
+        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
+        pair = concatenate([uni_embd, b_in])
+        embd_out = Dropout(rate=0.5)(pair)
+        relu = Activation('relu', name='relu1')(embd_out)
+        outputs = Dense(num_classes, activation=activation)(relu)
+        model = Model(inputs=[t_uni, w_uni, b_in], outputs=outputs)
+        if opt.num_gpus > 1:
+            model = ModelMGPU(model, gpus=opt.num_gpus)
+        optm = keras.optimizers.Nadam(opt.lr)
+        metrics = [top1_acc, fbeta_score_macro]
+
+        # metric for kakao arena
+        arena_score_metric = update_wrapper(partial(arena_score,
+                                            vocab_matrix=self.vocab),
+                                            arena_score)
+        metrics += [arena_score_metric] if self.vocab is not None else []
+
+        model.compile(loss='categorical_crossentropy',
+                    optimizer=optm,
+                    metrics=metrics)
+        model.summary(print_fn=lambda x: self.logger.info(x))
+        return model
+
+
+class TextBM:
+    def __init__(self, vocab_matrix=None):
+        self.logger = get_logger('text_bm')
+        self.vocab = vocab_matrix
+
+    def get_model(self, num_classes, activation='softmax'):
+        max_len = opt.max_len
+        voca_size = opt.unigram_hash_size + 1
+
+        # b cate
+        embd_b = Embedding(voca_size,
+                         opt.embd_size,
+                         name='b_embd')
+
+        t_uni = Input((max_len,), name="input_1")
+        b_embd = embd_b(t_uni)  # token
+
+        w_uni = Input((max_len,), name="input_2")
+        w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
+
+        uni_embd_mat = dot([b_embd, w_uni_mat], axes=1)
+        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
+        embd_out = Dropout(rate=0.5)(uni_embd)
+        relu = Activation('relu', name='relu1')(embd_out)
+        b_out = Dense(57, activation=activation)(relu)
+
+        # m cate
+        b_in = Input((1,), name="input_b")
+        embd_m = Embedding(voca_size,
+                         opt.embd_size,
+                         name='m_embd')
+        m_embd = embd_m(t_uni)  # token
+        m_uni_embd_mat = dot([m_embd, w_uni_mat], axes=1)
+        m_uni_embd = Reshape((opt.embd_size, ))(m_uni_embd_mat)
+        m_pair = concatenate([m_uni_embd, b_in])
+        m_embd_out = Dropout(rate=0.5)(m_pair)
+        m_relu = Activation('relu', name='relu2')(m_embd_out)
+        m_out = Dense(552, activation=activation)(m_relu)
+
+        model = Model(inputs=[t_uni, w_uni, b_in], outputs=[b_out, m_out])
+        if opt.num_gpus > 1:
+            model = ModelMGPU(model, gpus=opt.num_gpus)
+        optm = keras.optimizers.Nadam(opt.lr)
+        metrics = [top1_acc, fbeta_score_macro]
+
+        # metric for kakao arena
+        arena_score_metric = update_wrapper(partial(arena_score,
+                                            vocab_matrix=self.vocab),
+                                            arena_score)
+        metrics += [arena_score_metric] if self.vocab is not None else []
+
+        model.compile(loss='categorical_crossentropy',
+                    optimizer=optm,
+                    metrics=metrics)
+        model.summary(print_fn=lambda x: self.logger.info(x))
+        return model
+
+
+
 class TextImageNN:
     def __init__(self):
         self.logger = get_logger('text_img_nn')
