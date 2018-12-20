@@ -205,9 +205,9 @@ class TextM:
         return model
 
 
-class TextBM:
+class TextBMSD:
     def __init__(self, vocab_matrix=None):
-        self.logger = get_logger('text_bm')
+        self.logger = get_logger('text_bmsd')
         self.vocab = vocab_matrix
 
     def get_model(self, num_classes, activation='softmax'):
@@ -229,7 +229,7 @@ class TextBM:
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
         embd_out = Dropout(rate=0.5)(uni_embd)
         relu = Activation('relu', name='relu1')(embd_out)
-        b_out = Dense(57, activation=activation)(relu)
+        b_out = Dense(num_classes['b'], activation=activation)(relu)
 
         # m cate
         b_in = Input((1,), name="input_b")
@@ -242,9 +242,36 @@ class TextBM:
         m_pair = concatenate([m_uni_embd, b_in])
         m_embd_out = Dropout(rate=0.5)(m_pair)
         m_relu = Activation('relu', name='relu2')(m_embd_out)
-        m_out = Dense(552, activation=activation)(m_relu)
+        m_out = Dense(num_classes['m'], activation=activation)(m_relu)
 
-        model = Model(inputs=[t_uni, w_uni, b_in], outputs=[b_out, m_out])
+        # s cate
+        m_in = Input((1,), name="input_m")
+        embd_s = Embedding(voca_size,
+                         opt.embd_size,
+                         name='s_embd')
+        s_embd = embd_s(t_uni)  # token
+        s_uni_embd_mat = dot([s_embd, w_uni_mat], axes=1)
+        s_uni_embd = Reshape((opt.embd_size, ))(s_uni_embd_mat)
+        s_pair = concatenate([s_uni_embd, m_in])
+        s_embd_out = Dropout(rate=0.5)(s_pair)
+        s_relu = Activation('relu', name='relu3')(s_embd_out)
+        s_out = Dense(num_classes['s'], activation=activation)(s_relu)
+
+        # d cate
+        s_in = Input((1,), name="input_s")
+        embd_d = Embedding(voca_size,
+                         opt.embd_size,
+                         name='m_embd')
+        d_embd = embd_m(t_uni)  # token
+        d_uni_embd_mat = dot([d_embd, w_uni_mat], axes=1)
+        d_uni_embd = Reshape((opt.embd_size, ))(d_uni_embd_mat)
+        d_pair = concatenate([d_uni_embd, s_in])
+        d_embd_out = Dropout(rate=0.5)(d_pair)
+        d_relu = Activation('relu', name='relu4')(d_embd_out)
+        d_out = Dense(num_classes['d'], activation=activation)(d_relu)
+
+
+        model = Model(inputs=[t_uni, w_uni, b_in, m_in, s_in], outputs=[b_out, m_out, s_out, d_out])
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)

@@ -31,6 +31,7 @@
     "hidden_size": 1000,
     "score_exp": 2,
     "data_mode": "seq",
+    "multi_label": true,
     "lr": 1e-4,
     "num_epochs": 100,
     "batch_size": 30720,

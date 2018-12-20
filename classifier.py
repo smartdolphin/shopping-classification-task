@@ -25,6 +25,8 @@ import six
 import keras
 import keras.backend as K
 
+import network
+
 from datetime import datetime
 from keras.models import load_model
 from keras.callbacks import ModelCheckpoint
@@ -32,8 +34,6 @@ from six.moves import zip, cPickle
 from sklearn.utils import class_weight
 
 from misc import get_logger, Option
-from network import TextOnly, top1_acc, TextImage, TextImagePrice, TextImagePriceNN,\
-        TextImageNN
 
 opt = Option('./config.json')
 if six.PY2:
@@ -47,6 +47,7 @@ class Classifier():
     def __init__(self):
         self.logger = get_logger('Classifier')
         self.num_classes = 0
+        self.cate_size = {'b': 57, 'm': 552, 's': 3190, 'd': 404}
 
     def get_sample_generator(self, ds, batch_size, raise_stop_event=False):
         left, limit = 0, ds['uni'].shape[0]
@@ -179,8 +180,8 @@ class Classifier():
             item = list(map(int, v.split('>')))
             vocab_mat[k] = np.array(item).reshape(1, 4)
 
-        textimg = TextImage(vocab_mat)
-        model = textimg.get_model(self.num_classes)
+        textimg = network.TextBMSD()
+        model = textimg.get_model(self.cate_size)
 
         total_train_samples = train['uni'].shape[0]
         train_gen = self.get_sample_generator(train,
