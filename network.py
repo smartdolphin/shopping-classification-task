@@ -17,7 +17,7 @@ import tensorflow as tf
 import keras
 from keras.models import Model
 from keras.layers.merge import dot
-from keras.layers import Dense, Input, concatenate, BatchNormalization
+from keras.layers import Dense, Input, concatenate, BatchNormalization, CuDNNGRU
 from keras.layers.core import Reshape
 
 from keras.layers.embeddings import Embedding
@@ -213,6 +213,9 @@ class TextBMSD:
     def get_model(self, num_classes, activation='softmax'):
         max_len = opt.max_len
         voca_size = opt.unigram_hash_size + 1
+        # image feature
+        img = Input((opt.img_size,), name="input_3")
+        img_feat = Reshape((opt.img_size, ))(img)
 
         # b cate
         embd_b = Embedding(voca_size,
@@ -227,51 +230,64 @@ class TextBMSD:
 
         uni_embd_mat = dot([b_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
-        embd_out = Dropout(rate=0.5)(uni_embd)
+        pair = concatenate([uni_embd, img_feat])
+        embd_out = BatchNormalization()(pair)
         relu = Activation('relu', name='relu1')(embd_out)
         b_out = Dense(num_classes['b'], activation=activation)(relu)
 
         # m cate
         b_in = Input((1,), name="input_b")
         embd_m = Embedding(voca_size,
-                         opt.embd_size,
-                         name='m_embd')
+                           opt.embd_size,
+                           name='m_embd')
         m_embd = embd_m(t_uni)  # token
         m_uni_embd_mat = dot([m_embd, w_uni_mat], axes=1)
         m_uni_embd = Reshape((opt.embd_size, ))(m_uni_embd_mat)
-        m_pair = concatenate([m_uni_embd, b_in])
-        m_embd_out = Dropout(rate=0.5)(m_pair)
+        m_pair = concatenate([m_uni_embd, b_in, img_feat])
+        m_embd_out = BatchNormalization()(m_pair)
         m_relu = Activation('relu', name='relu2')(m_embd_out)
         m_out = Dense(num_classes['m'], activation=activation)(m_relu)
 
         # s cate
         m_in = Input((1,), name="input_m")
         embd_s = Embedding(voca_size,
-                         opt.embd_size,
-                         name='s_embd')
+                           opt.embd_size,
+                           name='s_embd')
         s_embd = embd_s(t_uni)  # token
         s_uni_embd_mat = dot([s_embd, w_uni_mat], axes=1)
         s_uni_embd = Reshape((opt.embd_size, ))(s_uni_embd_mat)
-        s_pair = concatenate([s_uni_embd, m_in])
-        s_embd_out = Dropout(rate=0.5)(s_pair)
+
+        bm_in = Input((2,), name="input_bm")
+        embd_bm_seq = Embedding(num_classes['b'] + num_classes['m'],
+                                opt.embd_size,
+                                name='bm_embd_seq')(bm_in)
+        bm_seq_gru = CuDNNGRU(opt.embd_size // 2)(embd_bm_seq)
+        s_pair = concatenate([s_uni_embd, bm_seq_gru, img_feat])
+        s_embd_out = BatchNormalization()(s_pair)
         s_relu = Activation('relu', name='relu3')(s_embd_out)
         s_out = Dense(num_classes['s'], activation=activation)(s_relu)
 
         # d cate
         s_in = Input((1,), name="input_s")
         embd_d = Embedding(voca_size,
-                         opt.embd_size,
-                         name='m_embd')
+                           opt.embd_size,
+                           name='m_embd')
         d_embd = embd_m(t_uni)  # token
         d_uni_embd_mat = dot([d_embd, w_uni_mat], axes=1)
         d_uni_embd = Reshape((opt.embd_size, ))(d_uni_embd_mat)
-        d_pair = concatenate([d_uni_embd, s_in])
-        d_embd_out = Dropout(rate=0.5)(d_pair)
+
+        bms_in = Input((3,), name="input_bms")
+        embd_bms_seq = Embedding(num_classes['b'] + num_classes['m'] + num_classes['s'],
+                                 opt.embd_size,
+                                 name='bms_embd_seq')(bms_in)
+        bms_seq_gru = CuDNNGRU(opt.embd_size // 2)(embd_bms_seq)
+        d_pair = concatenate([d_uni_embd, bms_seq_gru, img_feat])
+        d_embd_out = BatchNormalization()(d_pair)
         d_relu = Activation('relu', name='relu4')(d_embd_out)
         d_out = Dense(num_classes['d'], activation=activation)(d_relu)
 
 
-        model = Model(inputs=[t_uni, w_uni, b_in, m_in, s_in], outputs=[b_out, m_out, s_out, d_out])
+        model = Model(inputs=[t_uni, w_uni, img, b_in, bm_in, bms_in], outputs=[b_out, m_out, s_out, d_out])
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
