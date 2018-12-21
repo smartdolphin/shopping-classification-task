@@ -56,11 +56,13 @@ class Classifier():
 
             if opt.multi_label is True:
                 b = ds['b'][left:right, :]
-                m = ds['m'][left:right, :]
-                s = ds['s'][left:right, :]
+                m = ds['m'][left:right, :] + self.cate_size['b']
+                s = ds['s'][left:right, :] + self.cate_size['b'] + self.cate_size['m']
+                bm = np.concatenate([b, m], axis=1)
+                bms = np.concatenate([b, m, s], axis=1)
 
-                X = [ds[t][left:right, :] for t in ['uni', 'w_uni']]
-                X += [b, m, s]
+                X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
+                X += [b, bm, bms]
                 Y = [ds['b_cate'][left:right],
                      ds['m_cate'][left:right],
                      ds['s_cate'][left:right],
@@ -170,16 +172,23 @@ class Classifier():
         self.logger.info('# of train samples: %s' % train['cate'].shape[0])
         self.logger.info('# of dev samples: %s' % dev['cate'].shape[0])
 
-        checkpoint = ModelCheckpoint(self.weight_fname, monitor='val_arena_score',
-                                     save_best_only=True, mode='max', period=opt.num_checkpoint)
+        checkpoint_1 = ModelCheckpoint('{}_01'.format(self.weight_fname), monitor='val_dense_1_loss',
+                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
+        checkpoint_2 = ModelCheckpoint('{}_02'.format(self.weight_fname), monitor='val_dense_2_loss',
+                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
+        checkpoint_3 = ModelCheckpoint('{}_03'.format(self.weight_fname), monitor='val_dense_3_loss',
+                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
+        checkpoint_4 = ModelCheckpoint('{}_04'.format(self.weight_fname), monitor='val_dense_4_loss',
+                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
 
-        # generate vocab matrix
+        # generate vocab matrix TODO
+        '''
         vocab_mat = np.zeros((len(meta['y_vocab']), 4), dtype=np.int32)
         inv_y_vocab = {v: k for k, v in six.iteritems(meta['y_vocab'])}
         for k, v in inv_y_vocab.items():
             item = list(map(int, v.split('>')))
             vocab_mat[k] = np.array(item).reshape(1, 4)
-
+        '''
         textimg = network.TextBMSD()
         model = textimg.get_model(self.cate_size)
 
@@ -238,7 +247,11 @@ class Classifier():
                             validation_steps=self.validation_steps,
                             shuffle=True,
                             class_weight=class_weights,
-                            callbacks=[checkpoint, tb_hist])
+                            callbacks=[checkpoint_1,
+                                checkpoint_2,
+                                checkpoint_3,
+                                checkpoint_4,
+                                tb_hist])
 
         model.load_weights(self.weight_fname) # loads from checkout point if exists
         open(self.model_fname + '.json', 'w').write(model.to_json())
