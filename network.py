@@ -17,7 +17,7 @@ import tensorflow as tf
 import keras
 from keras.models import Model
 from keras.layers.merge import dot
-from keras.layers import Dense, Input, concatenate, BatchNormalization, CuDNNGRU
+from keras.layers import Dense, Input, concatenate, BatchNormalization, SimpleRNN
 from keras.layers.core import Reshape
 
 from keras.layers.embeddings import Embedding
@@ -249,7 +249,6 @@ class TextBMSD:
         m_out = Dense(num_classes['m'], activation=activation)(m_relu)
 
         # s cate
-        m_in = Input((1,), name="input_m")
         embd_s = Embedding(voca_size,
                            opt.embd_size,
                            name='s_embd')
@@ -261,14 +260,13 @@ class TextBMSD:
         embd_bm_seq = Embedding(num_classes['b'] + num_classes['m'],
                                 opt.embd_size,
                                 name='bm_embd_seq')(bm_in)
-        bm_seq_gru = CuDNNGRU(opt.embd_size // 2)(embd_bm_seq)
+        bm_seq = SimpleRNN(opt.embd_size // 2)(embd_bm_seq)
         s_pair = concatenate([s_uni_embd, bm_seq_gru, img_feat])
         s_embd_out = BatchNormalization()(s_pair)
         s_relu = Activation('relu', name='relu3')(s_embd_out)
         s_out = Dense(num_classes['s'], activation=activation)(s_relu)
 
         # d cate
-        s_in = Input((1,), name="input_s")
         embd_d = Embedding(voca_size,
                            opt.embd_size,
                            name='m_embd')
@@ -280,7 +278,7 @@ class TextBMSD:
         embd_bms_seq = Embedding(num_classes['b'] + num_classes['m'] + num_classes['s'],
                                  opt.embd_size,
                                  name='bms_embd_seq')(bms_in)
-        bms_seq_gru = CuDNNGRU(opt.embd_size // 2)(embd_bms_seq)
+        bms_seq = SimpleRNN(opt.embd_size // 2)(embd_bms_seq)
         d_pair = concatenate([d_uni_embd, bms_seq_gru, img_feat])
         d_embd_out = BatchNormalization()(d_pair)
         d_relu = Activation('relu', name='relu4')(d_embd_out)
