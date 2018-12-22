@@ -192,7 +192,7 @@ class Classifier():
         textimg = network.TextBMSD()
         model = textimg.get_model(self.cate_size)
         if weight_path is not None:
-            if os.path.exist(weight_path):
+            if os.path.exists(weight_path):
                 model.load_weights(weight_path)
             else:
                 self.logger.info('Not exist path: {}'.format(weight_path))

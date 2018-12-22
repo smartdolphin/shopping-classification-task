@@ -238,7 +238,7 @@ class TextS:
         s_pair = concatenate([uni_embd, bm_seq, img_feat])
         s_embd_out = Dropout(rate=0.5)(s_pair)
         s_relu = Activation('relu', name='relu')(s_embd_out)
-        s_out = Dense(num_classes['s'], activation=activation)(s_relu)
+        outputs = Dense(num_classes['s'], activation=activation)(s_relu)
         model = Model(inputs=[t_uni, w_uni, img, bm_in], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
