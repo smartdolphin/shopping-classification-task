@@ -61,8 +61,8 @@ class TextOnly:
             model = Model(inputs=[t_uni, w_uni], outputs=outputs)
             optm = keras.optimizers.Nadam(opt.lr)
             model.compile(loss='binary_crossentropy',
-                        optimizer=optm,
-                        metrics=[top1_acc])
+                          optimizer=optm,
+                          metrics=[top1_acc])
             model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 
@@ -109,8 +109,8 @@ class TextImage:
         metrics += [arena_score_metric] if self.vocab is not None else []
 
         model.compile(loss='categorical_crossentropy',
-                    optimizer=optm,
-                    metrics=metrics)
+                      optimizer=optm,
+                      metrics=metrics)
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 
@@ -143,22 +143,16 @@ class TextB:
         pair = concatenate([uni_embd, img_feat])
         embd_out = Dropout(rate=0.5)(pair)
         relu = Activation('relu', name='relu1')(embd_out)
-        outputs = Dense(num_classes, activation=activation)(relu)
+        outputs = Dense(num_classes['b'], activation=activation)(relu)
         model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
         metrics = [top1_acc, fbeta_score_macro]
 
-        # metric for kakao arena
-        arena_score_metric = update_wrapper(partial(arena_score,
-                                            vocab_matrix=self.vocab),
-                                            arena_score)
-        metrics += [arena_score_metric] if self.vocab is not None else []
-
         model.compile(loss='categorical_crossentropy',
-                    optimizer=optm,
-                    metrics=metrics)
+                      optimizer=optm,
+                      metrics=metrics)
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 
@@ -195,22 +189,118 @@ class TextM:
         pair = concatenate([uni_embd, b_dense, img_feat])
         embd_out = Dropout(rate=0.5)(pair)
         relu = Activation('relu', name='relu1')(embd_out)
-        outputs = Dense(num_classes, activation=activation)(relu)
+        outputs = Dense(num_classes['m'], activation=activation)(relu)
         model = Model(inputs=[t_uni, w_uni, img, b_in], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
         metrics = [top1_acc, fbeta_score_macro]
 
-        # metric for kakao arena
-        arena_score_metric = update_wrapper(partial(arena_score,
-                                            vocab_matrix=self.vocab),
-                                            arena_score)
-        metrics += [arena_score_metric] if self.vocab is not None else []
+        model.compile(loss='categorical_crossentropy',
+                      optimizer=optm,
+                      metrics=metrics)
+        model.summary(print_fn=lambda x: self.logger.info(x))
+        return model
+
+
+class TextS:
+    def __init__(self, vocab_matrix=None):
+        self.logger = get_logger('text_s')
+        self.vocab = vocab_matrix
+
+    def get_model(self, num_classes, activation='softmax'):
+        max_len = opt.max_len
+        voca_size = opt.unigram_hash_size + 1
+
+        # image feature
+        img = Input((opt.img_size,), name="input_img")
+        img_feat = Reshape((opt.img_size, ))(img)
+
+        embd = Embedding(voca_size,
+                         opt.embd_size,
+                         name='uni_embd')
+
+        t_uni = Input((max_len,), name="input_1")
+        t_uni_embd = embd(t_uni)  # token
+
+        w_uni = Input((max_len,), name="input_2")
+        w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
+
+        uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
+        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
+
+        # sequence model
+        bm_in = Input((2,), name="input_bm")
+        embd_bm_seq = Embedding(num_classes['b'] + num_classes['m'],
+                                opt.embd_size,
+                                name='bm_embd_seq')(bm_in)
+        bm_seq = SimpleRNN(opt.embd_size // 2)(embd_bm_seq)
+        s_pair = concatenate([uni_embd, bm_seq, img_feat])
+        s_embd_out = Dropout(rate=0.5)(s_pair)
+        s_relu = Activation('relu', name='relu')(s_embd_out)
+        s_out = Dense(num_classes['s'], activation=activation)(s_relu)
+        model = Model(inputs=[t_uni, w_uni, img, bm_in], outputs=outputs)
+        if opt.num_gpus > 1:
+            model = ModelMGPU(model, gpus=opt.num_gpus)
+        optm = keras.optimizers.Nadam(opt.lr)
+        metrics = [top1_acc, fbeta_score_macro]
 
         model.compile(loss='categorical_crossentropy',
-                    optimizer=optm,
-                    metrics=metrics)
+                      optimizer=optm,
+                      metrics=metrics)
+        model.summary(print_fn=lambda x: self.logger.info(x))
+        return model
+
+
+class TextD:
+    def __init__(self, vocab_matrix=None):
+        self.logger = get_logger('text_d')
+        self.vocab = vocab_matrix
+
+    def get_model(self, num_classes, activation='softmax'):
+        max_len = opt.max_len
+        voca_size = opt.unigram_hash_size + 1
+
+        # image feature
+        img = Input((opt.img_size,), name="input_img")
+        img_feat = Reshape((opt.img_size, ))(img)
+
+        embd = Embedding(voca_size,
+                         opt.embd_size,
+                         name='uni_embd')
+
+        t_uni = Input((max_len,), name="input_1")
+        t_uni_embd = embd(t_uni)  # token
+
+        w_uni = Input((max_len,), name="input_2")
+        w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
+
+        b_in = Input((1,), name="input_b")
+        b_dense = Dense(opt.embd_size // 4)(b_in)
+        b_dense = Activation('tanh', name='tanh')(b_dense)
+
+        uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
+        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
+
+        # d cate
+        bms_in = Input((3,), name="input_bms")
+        embd_bms_seq = Embedding(num_classes['b'] + num_classes['m'] + num_classes['s'],
+                                 opt.embd_size,
+                                 name='bms_embd_seq')(bms_in)
+        bms_seq = SimpleRNN(opt.embd_size // 2)(embd_bms_seq)
+        d_pair = concatenate([uni_embd, bms_seq, img_feat])
+        d_embd_out = Dropout(rate=0.5)(d_pair)
+        d_relu = Activation('relu', name='relu')(d_embd_out)
+        outputs = Dense(num_classes['d'], activation=activation)(d_relu)
+        model = Model(inputs=[t_uni, w_uni, img, b_in, bms_in], outputs=outputs)
+        if opt.num_gpus > 1:
+            model = ModelMGPU(model, gpus=opt.num_gpus)
+        optm = keras.optimizers.Nadam(opt.lr)
+        metrics = [top1_acc, fbeta_score_macro]
+
+        model.compile(loss='categorical_crossentropy',
+                      optimizer=optm,
+                      metrics=metrics)
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 
@@ -274,7 +364,7 @@ class TextBMSD:
                                 opt.embd_size,
                                 name='bm_embd_seq')(bm_in)
         bm_seq = SimpleRNN(opt.embd_size // 2)(embd_bm_seq)
-        s_pair = concatenate([s_uni_embd, bm_seq_gru, img_feat])
+        s_pair = concatenate([s_uni_embd, bm_seq, img_feat])
         s_embd_out = BatchNormalization()(s_pair)
         s_relu = Activation('relu', name='relu3')(s_embd_out)
         s_out = Dense(num_classes['s'], activation=activation)(s_relu)
@@ -292,7 +382,7 @@ class TextBMSD:
                                  opt.embd_size,
                                  name='bms_embd_seq')(bms_in)
         bms_seq = SimpleRNN(opt.embd_size // 2)(embd_bms_seq)
-        d_pair = concatenate([d_uni_embd, bms_seq_gru, img_feat])
+        d_pair = concatenate([d_uni_embd, bms_seq, img_feat])
         d_embd_out = BatchNormalization()(d_pair)
         d_relu = Activation('relu', name='relu4')(d_embd_out)
         d_out = Dense(num_classes['d'], activation=activation)(d_relu)
@@ -304,15 +394,9 @@ class TextBMSD:
         optm = keras.optimizers.Nadam(opt.lr)
         metrics = [top1_acc, fbeta_score_macro]
 
-        # metric for kakao arena
-        arena_score_metric = update_wrapper(partial(arena_score,
-                                            vocab_matrix=self.vocab),
-                                            arena_score)
-        metrics += [arena_score_metric] if self.vocab is not None else []
-
         model.compile(loss='categorical_crossentropy',
-                    optimizer=optm,
-                    metrics=metrics)
+                      optimizer=optm,
+                      metrics=metrics)
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
 
