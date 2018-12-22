@@ -153,7 +153,7 @@ class Classifier():
                 pbar.update(X[0].shape[0])
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
-    def train(self, data_root, out_dir, weight_mode='score_weight', model_name=None):
+    def train(self, data_root, out_dir, weight_path=None, weight_mode='score_weight', model_name=None):
         data_path = os.path.join(data_root, 'data.h5py')
         meta_path = os.path.join(data_root, 'meta')
         data = h5py.File(data_path, 'r')
@@ -191,6 +191,11 @@ class Classifier():
         '''
         textimg = network.TextBMSD()
         model = textimg.get_model(self.cate_size)
+        if weight_path is not None:
+            if os.path.exist(weight_path):
+                model.load_weights(weight_path)
+            else:
+                self.logger.info('Not exist path: {}'.format(weight_path))
 
         total_train_samples = train['uni'].shape[0]
         train_gen = self.get_sample_generator(train,
