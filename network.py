@@ -124,6 +124,10 @@ class TextB:
         max_len = opt.max_len
         voca_size = opt.unigram_hash_size + 1
 
+        # image feature
+        img = Input((opt.img_size,), name="input_img")
+        img_feat = Reshape((opt.img_size, ))(img)
+
         embd = Embedding(voca_size,
                          opt.embd_size,
                          name='uni_embd')
@@ -134,13 +138,13 @@ class TextB:
         w_uni = Input((max_len,), name="input_2")
         w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
 
-
         uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
-        embd_out = Dropout(rate=0.5)(uni_embd)
+        pair = concatenate([uni_embd, img_feat])
+        embd_out = Dropout(rate=0.5)(pair)
         relu = Activation('relu', name='relu1')(embd_out)
         outputs = Dense(num_classes, activation=activation)(relu)
-        model = Model(inputs=[t_uni, w_uni], outputs=outputs)
+        model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -169,7 +173,7 @@ class TextM:
         voca_size = opt.unigram_hash_size + 1
 
         # image feature
-        img = Input((opt.img_size,), name="input_3")
+        img = Input((opt.img_size,), name="input_img")
         img_feat = Reshape((opt.img_size, ))(img)
 
         embd = Embedding(voca_size,
@@ -220,7 +224,7 @@ class TextBMSD:
         max_len = opt.max_len
         voca_size = opt.unigram_hash_size + 1
         # image feature
-        img = Input((opt.img_size,), name="input_3")
+        img = Input((opt.img_size,), name="input_img")
         img_feat = Reshape((opt.img_size, ))(img)
 
         # b cate
