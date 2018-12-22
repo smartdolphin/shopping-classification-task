@@ -168,6 +168,10 @@ class TextM:
         max_len = opt.max_len
         voca_size = opt.unigram_hash_size + 1
 
+        # image feature
+        img = Input((opt.img_size,), name="input_3")
+        img_feat = Reshape((opt.img_size, ))(img)
+
         embd = Embedding(voca_size,
                          opt.embd_size,
                          name='uni_embd')
@@ -179,14 +183,16 @@ class TextM:
         w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
 
         b_in = Input((1,), name="input_b")
+        b_dense = Dense(opt.embd_size // 4)(b_in)
+        b_dense = Activation('tanh', name='tanh')(b_dense)
 
         uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
-        pair = concatenate([uni_embd, b_in])
+        pair = concatenate([uni_embd, b_dense, img_feat])
         embd_out = Dropout(rate=0.5)(pair)
         relu = Activation('relu', name='relu1')(embd_out)
         outputs = Dense(num_classes, activation=activation)(relu)
-        model = Model(inputs=[t_uni, w_uni, b_in], outputs=outputs)
+        model = Model(inputs=[t_uni, w_uni, img, b_in], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -237,13 +243,16 @@ class TextBMSD:
 
         # m cate
         b_in = Input((1,), name="input_b")
+        b_dense = Dense(opt.embd_size // 4)(b_in)
+        b_dense = Activation('tanh', name='tanh')(b_dense)
+
         embd_m = Embedding(voca_size,
                            opt.embd_size,
                            name='m_embd')
         m_embd = embd_m(t_uni)  # token
         m_uni_embd_mat = dot([m_embd, w_uni_mat], axes=1)
         m_uni_embd = Reshape((opt.embd_size, ))(m_uni_embd_mat)
-        m_pair = concatenate([m_uni_embd, b_in, img_feat])
+        m_pair = concatenate([m_uni_embd, b_dense, img_feat])
         m_embd_out = BatchNormalization()(m_pair)
         m_relu = Activation('relu', name='relu2')(m_embd_out)
         m_out = Dense(num_classes['m'], activation=activation)(m_relu)
