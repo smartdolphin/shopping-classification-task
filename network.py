@@ -24,6 +24,7 @@ from keras.layers.core import Reshape
 
 from keras.layers.embeddings import Embedding
 from keras.layers.core import Dropout, Activation
+from keras.utils.vis_utils import plot_model
 
 from functools import partial, update_wrapper
 from metric import fbeta_score_macro, arena_score
@@ -175,6 +176,8 @@ class TextB:
         relu = Activation('relu', name='relu')(embd_out)
         outputs = Dense(num_classes['b'], activation=activation, name='b_out')(relu)
         model = Model(inputs=[t_uni, w_uni, char_in, img], outputs=outputs)
+        if opt.graphviz:
+            plot_model(model, to_file='b.png', show_shapes=True, show_layer_names=True)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -239,6 +242,8 @@ class TextM:
         relu = Activation('relu', name='relu1')(embd_out)
         outputs = Dense(num_classes['m'], activation=activation, name='m_out')(relu)
         model = Model(inputs=[t_uni, w_uni, char_in, img, b_in], outputs=outputs)
+        if opt.graphviz:
+            plot_model(model, to_file='m.png', show_shapes=True, show_layer_names=True)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -301,6 +306,8 @@ class TextS:
         s_relu = Activation('relu', name='relu')(s_embd_out)
         outputs = Dense(num_classes['s'], activation=activation, name='s_out')(s_relu)
         model = Model(inputs=[t_uni, w_uni, char_in, img, bm_in], outputs=outputs)
+        if opt.graphviz:
+            plot_model(model, to_file='s.png', show_shapes=True, show_layer_names=True)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -363,6 +370,8 @@ class TextD:
         d_relu = Activation('relu', name='relu')(d_embd_out)
         outputs = Dense(num_classes['d'], activation=activation, name='d_out')(d_relu)
         model = Model(inputs=[t_uni, w_uni, char_in, img, bms_in], outputs=outputs)
+        if opt.graphviz:
+            plot_model(model, to_file='d.png', show_shapes=True, show_layer_names=True)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -521,7 +530,8 @@ class TextBMSD:
 
         model = Model(inputs=[t_uni, w_uni, char_in, img, b_in, bm_in, bms_in],
                       outputs=[b_out, m_out, s_out, d_out, bmsd_out])
-
+        if opt.graphviz:
+            plot_model(model, to_file='bmsd.png', show_shapes=True, show_layer_names=True)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
