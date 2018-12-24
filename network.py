@@ -15,9 +15,11 @@
 import tensorflow as tf
 
 import keras
+from keras import regularizers
 from keras.models import Model
 from keras.layers.merge import dot
 from keras.layers import Dense, Input, concatenate, BatchNormalization, SimpleRNN
+from keras.layers import Conv1D, MaxPooling1D, GlobalMaxPooling1D
 from keras.layers.core import Reshape
 
 from keras.layers.embeddings import Embedding
@@ -27,6 +29,22 @@ from functools import partial, update_wrapper
 from metric import fbeta_score_macro, arena_score
 from misc import get_logger, Option, ModelMGPU
 opt = Option('./config.json')
+
+
+def get_model(target_model, cate_size):
+    if target_model == 'b':
+        model = TextB().get_model(cate_size)
+    elif target_model == 'm':
+        model = TextM().get_model(cate_size)
+    elif target_model == 's':
+        model = TextS().get_model(cate_size)
+    elif target_model == 'd':
+        model = TextD().get_model(cate_size)
+    elif target_model == 'bmsd':
+        model = TextBMSD().get_model(cate_size)
+    else:
+        raise Exception('Unknown model: {}'.format(target_model))
+    return model
 
 
 def top1_acc(x, y):
@@ -140,11 +158,23 @@ class TextB:
 
         uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
-        pair = concatenate([uni_embd, img_feat])
+
+        # cnn
+        char_in = Input((max_len,), name="input_3")
+        cnn_embd = Embedding(opt.char_vocab_size,
+                             opt.embd_size,
+                             name='cnn_embd')(char_in)
+        x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(cnn_embd)
+        x = MaxPooling1D(2)(x)
+        x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(x)
+        x = GlobalMaxPooling1D()(x)
+        x = Dropout(0.5)(x)
+        cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
+        pair = concatenate([img_feat, cnn_out])
         embd_out = Dropout(rate=0.5)(pair)
-        relu = Activation('relu', name='relu1')(embd_out)
-        outputs = Dense(num_classes['b'], activation=activation)(relu)
-        model = Model(inputs=[t_uni, w_uni, img], outputs=outputs)
+        relu = Activation('relu', name='relu')(embd_out)
+        outputs = Dense(num_classes['b'], activation=activation, name='b_out')(relu)
+        model = Model(inputs=[t_uni, w_uni, char_in, img], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -180,17 +210,35 @@ class TextM:
         w_uni = Input((max_len,), name="input_2")
         w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
 
+        # b cate
         b_in = Input((1,), name="input_b")
         b_dense = Dense(opt.embd_size // 4)(b_in)
-        b_dense = Activation('tanh', name='tanh')(b_dense)
+        b_dense = BatchNormalization()(b_dense)
+        b_dense = Activation('relu', name='b_relu_1')(b_dense)
+        b_dense = Dense(opt.embd_size // 4)(b_dense)
+        b_dense = BatchNormalization()(b_dense)
+        b_dense = Activation('relu', name='b_relu_2')(b_dense)
+        b_dense = Dropout(rate=0.5)(b_dense)
+
+        # cnn
+        char_in = Input((max_len,), name="input_c")
+        cnn_embd = Embedding(opt.char_vocab_size,
+                             opt.embd_size,
+                             name='cnn_embd')(char_in)
+        x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(cnn_embd)
+        x = MaxPooling1D(2)(x)
+        x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(x)
+        x = GlobalMaxPooling1D()(x)
+        x = Dropout(0.5)(x)
+        cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
 
         uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
-        pair = concatenate([uni_embd, b_dense, img_feat])
-        embd_out = Dropout(rate=0.5)(pair)
+        pair = concatenate([b_dense, uni_embd, img_feat, cnn_out])
+        embd_out = BatchNormalization()(pair)
         relu = Activation('relu', name='relu1')(embd_out)
-        outputs = Dense(num_classes['m'], activation=activation)(relu)
-        model = Model(inputs=[t_uni, w_uni, img, b_in], outputs=outputs)
+        outputs = Dense(num_classes['m'], activation=activation, name='m_out')(relu)
+        model = Model(inputs=[t_uni, w_uni, char_in, img, b_in], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -235,11 +283,24 @@ class TextS:
                                 opt.embd_size,
                                 name='bm_embd_seq')(bm_in)
         bm_seq = SimpleRNN(opt.embd_size // 2)(embd_bm_seq)
-        s_pair = concatenate([uni_embd, bm_seq, img_feat])
+
+        # cnn
+        char_in = Input((max_len,), name="input_c")
+        cnn_embd = Embedding(opt.char_vocab_size,
+                             opt.embd_size,
+                             name='cnn_embd')(char_in)
+        x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(cnn_embd)
+        x = MaxPooling1D(2)(x)
+        x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(x)
+        x = GlobalMaxPooling1D()(x)
+        x = Dropout(0.5)(x)
+        cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
+
+        s_pair = concatenate([bm_seq, uni_embd, img_feat, cnn_out])
         s_embd_out = Dropout(rate=0.5)(s_pair)
         s_relu = Activation('relu', name='relu')(s_embd_out)
-        outputs = Dense(num_classes['s'], activation=activation)(s_relu)
-        model = Model(inputs=[t_uni, w_uni, img, bm_in], outputs=outputs)
+        outputs = Dense(num_classes['s'], activation=activation, name='s_out')(s_relu)
+        model = Model(inputs=[t_uni, w_uni, char_in, img, bm_in], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -275,10 +336,6 @@ class TextD:
         w_uni = Input((max_len,), name="input_2")
         w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
 
-        b_in = Input((1,), name="input_b")
-        b_dense = Dense(opt.embd_size // 4)(b_in)
-        b_dense = Activation('tanh', name='tanh')(b_dense)
-
         uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
 
@@ -288,11 +345,24 @@ class TextD:
                                  opt.embd_size,
                                  name='bms_embd_seq')(bms_in)
         bms_seq = SimpleRNN(opt.embd_size // 2)(embd_bms_seq)
-        d_pair = concatenate([uni_embd, bms_seq, img_feat])
-        d_embd_out = Dropout(rate=0.5)(d_pair)
+
+        # cnn
+        char_in = Input((max_len,), name="input_c")
+        cnn_embd = Embedding(opt.char_vocab_size,
+                             opt.embd_size,
+                             name='cnn_embd')(char_in)
+        x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(cnn_embd)
+        x = MaxPooling1D(2)(x)
+        x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(x)
+        x = GlobalMaxPooling1D()(x)
+        x = Dropout(0.5)(x)
+        cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
+
+        d_pair = concatenate([bms_seq, uni_embd, img_feat, cnn_out])
+        d_embd_out = BatchNormalization()(d_pair)
         d_relu = Activation('relu', name='relu')(d_embd_out)
-        outputs = Dense(num_classes['d'], activation=activation)(d_relu)
-        model = Model(inputs=[t_uni, w_uni, img, b_in, bms_in], outputs=outputs)
+        outputs = Dense(num_classes['d'], activation=activation, name='d_out')(d_relu)
+        model = Model(inputs=[t_uni, w_uni, char_in, img, bms_in], outputs=outputs)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -317,6 +387,9 @@ class TextBMSD:
         img = Input((opt.img_size,), name="input_img")
         img_feat = Reshape((opt.img_size, ))(img)
 
+        # char input
+        char_in = Input((max_len,), name="input_c")
+
         # b cate
         embd_b = Embedding(voca_size,
                          opt.embd_size,
@@ -328,17 +401,34 @@ class TextBMSD:
         w_uni = Input((max_len,), name="input_2")
         w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
 
-        uni_embd_mat = dot([b_embd, w_uni_mat], axes=1)
-        uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
-        pair = concatenate([uni_embd, img_feat])
-        embd_out = BatchNormalization()(pair)
-        relu = Activation('relu', name='relu1')(embd_out)
-        b_out = Dense(num_classes['b'], activation=activation)(relu)
+        b_uni_embd_mat = dot([b_embd, w_uni_mat], axes=1)
+        b_uni_embd = Reshape((opt.embd_size, ))(b_uni_embd_mat)
+
+        # b cnn
+        b_cnn_embd = Embedding(opt.char_vocab_size,
+                               opt.embd_size,
+                               name='b_cnn_embd')(char_in)
+        b_x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(b_cnn_embd)
+        b_x = MaxPooling1D(2)(b_x)
+        b_x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(b_x)
+        b_x = GlobalMaxPooling1D()(b_x)
+        b_x = Dropout(0.5)(b_x)
+        b_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(b_x)
+
+        b_pair = concatenate([b_uni_embd, img_feat, b_cnn_out])
+        b_embd_out = BatchNormalization()(b_pair)
+        b_relu = Activation('relu', name='b_relu')(b_embd_out)
+        b_out = Dense(num_classes['b'], activation=activation, name='b_out')(b_relu)
 
         # m cate
         b_in = Input((1,), name="input_b")
         b_dense = Dense(opt.embd_size // 4)(b_in)
-        b_dense = Activation('tanh', name='tanh')(b_dense)
+        b_dense = BatchNormalization()(b_dense)
+        b_dense = Activation('relu', name='b_relu_1')(b_dense)
+        b_dense = Dense(opt.embd_size // 4)(b_dense)
+        b_dense = BatchNormalization()(b_dense)
+        b_dense = Activation('relu', name='b_relu_2')(b_dense)
+        b_dense = Dropout(rate=0.5)(b_dense)
 
         embd_m = Embedding(voca_size,
                            opt.embd_size,
@@ -346,10 +436,22 @@ class TextBMSD:
         m_embd = embd_m(t_uni)  # token
         m_uni_embd_mat = dot([m_embd, w_uni_mat], axes=1)
         m_uni_embd = Reshape((opt.embd_size, ))(m_uni_embd_mat)
-        m_pair = concatenate([m_uni_embd, b_dense, img_feat])
+
+        # m cnn
+        m_cnn_embd = Embedding(opt.char_vocab_size,
+                               opt.embd_size,
+                               name='m_cnn_embd')(char_in)
+        m_x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(m_cnn_embd)
+        m_x = MaxPooling1D(2)(m_x)
+        m_x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(m_x)
+        m_x = GlobalMaxPooling1D()(m_x)
+        m_x = Dropout(0.5)(m_x)
+        m_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(m_x)
+
+        m_pair = concatenate([b_dense, m_uni_embd, img_feat, m_cnn_out])
         m_embd_out = BatchNormalization()(m_pair)
-        m_relu = Activation('relu', name='relu2')(m_embd_out)
-        m_out = Dense(num_classes['m'], activation=activation)(m_relu)
+        m_relu = Activation('relu', name='m_relu')(m_embd_out)
+        m_out = Dense(num_classes['m'], activation=activation, name='m_out')(m_relu)
 
         # s cate
         embd_s = Embedding(voca_size,
@@ -364,16 +466,28 @@ class TextBMSD:
                                 opt.embd_size,
                                 name='bm_embd_seq')(bm_in)
         bm_seq = SimpleRNN(opt.embd_size // 2)(embd_bm_seq)
-        s_pair = concatenate([s_uni_embd, bm_seq, img_feat])
+
+        # s cnn
+        s_cnn_embd = Embedding(opt.char_vocab_size,
+                               opt.embd_size,
+                               name='s_cnn_embd')(char_in)
+        s_x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(s_cnn_embd)
+        s_x = MaxPooling1D(2)(s_x)
+        s_x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(s_x)
+        s_x = GlobalMaxPooling1D()(s_x)
+        s_x = Dropout(0.5)(s_x)
+        s_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(s_x)
+
+        s_pair = concatenate([bm_seq, s_uni_embd, img_feat, s_cnn_out])
         s_embd_out = BatchNormalization()(s_pair)
-        s_relu = Activation('relu', name='relu3')(s_embd_out)
-        s_out = Dense(num_classes['s'], activation=activation)(s_relu)
+        s_relu = Activation('relu', name='s_relu')(s_embd_out)
+        s_out = Dense(num_classes['s'], activation=activation, name='s_out')(s_relu)
 
         # d cate
         embd_d = Embedding(voca_size,
                            opt.embd_size,
-                           name='m_embd')
-        d_embd = embd_m(t_uni)  # token
+                           name='d_embd')
+        d_embd = embd_d(t_uni)  # token
         d_uni_embd_mat = dot([d_embd, w_uni_mat], axes=1)
         d_uni_embd = Reshape((opt.embd_size, ))(d_uni_embd_mat)
 
@@ -382,13 +496,32 @@ class TextBMSD:
                                  opt.embd_size,
                                  name='bms_embd_seq')(bms_in)
         bms_seq = SimpleRNN(opt.embd_size // 2)(embd_bms_seq)
-        d_pair = concatenate([d_uni_embd, bms_seq, img_feat])
+
+        # d cnn
+        d_cnn_embd = Embedding(opt.char_vocab_size,
+                               opt.embd_size,
+                               name='d_cnn_embd')(char_in)
+        d_x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(d_cnn_embd)
+        d_x = MaxPooling1D(2)(d_x)
+        d_x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(d_x)
+        d_x = GlobalMaxPooling1D()(d_x)
+        d_x = Dropout(0.5)(d_x)
+        d_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(d_x)
+
+        d_pair = concatenate([bms_seq, d_uni_embd, img_feat, d_cnn_out])
         d_embd_out = BatchNormalization()(d_pair)
-        d_relu = Activation('relu', name='relu4')(d_embd_out)
-        d_out = Dense(num_classes['d'], activation=activation)(d_relu)
+        d_relu = Activation('relu', name='d_relu')(d_embd_out)
+        d_out = Dense(num_classes['d'], activation=activation, name='d_out')(d_relu)
 
+        # bmsd cate
+        bmsd_pair = concatenate([b_out, m_out, s_out, d_out])
+        bmsd_pair = BatchNormalization()(bmsd_pair)
+        bmsd_relu = Activation('relu', name='bmsd_relu')(bmsd_pair)
+        bmsd_out = Dense(num_classes['bmsd'], activation=activation, name='bmsd_out')(bmsd_relu)
 
-        model = Model(inputs=[t_uni, w_uni, img, b_in, bm_in, bms_in], outputs=[b_out, m_out, s_out, d_out])
+        model = Model(inputs=[t_uni, w_uni, char_in, img, b_in, bm_in, bms_in],
+                      outputs=[b_out, m_out, s_out, d_out, bmsd_out])
+
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
@@ -399,7 +532,6 @@ class TextBMSD:
                       metrics=metrics)
         model.summary(print_fn=lambda x: self.logger.info(x))
         return model
-
 
 
 class TextImageNN:

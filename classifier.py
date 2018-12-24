@@ -46,27 +46,41 @@ DEV_DATA_LIST = ['../data/dev.chunk.01']
 class Classifier():
     def __init__(self):
         self.logger = get_logger('Classifier')
-        self.num_classes = 0
-        self.cate_size = {'b': 57, 'm': 552, 's': 3190, 'd': 404}
+        self.cate_size = {'b': 57, 'm': 552, 's': 3190, 'd': 404, 'bmsd': 4215}
 
-    def get_sample_generator(self, ds, batch_size, raise_stop_event=False):
+    def get_sample_generator(self, ds, batch_size, target, raise_stop_event=False):
         left, limit = 0, ds['uni'].shape[0]
         while True:
             right = min(left + batch_size, limit)
 
             if opt.multi_label is True:
-                b = ds['b'][left:right, :]
-                m = ds['m'][left:right, :] + self.cate_size['b']
-                s = ds['s'][left:right, :] + self.cate_size['b'] + self.cate_size['m']
-                bm = np.concatenate([b, m], axis=1)
-                bms = np.concatenate([b, m, s], axis=1)
+                X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'char', 'img']]
+                if 'm' in target or 's' in target or 'd' in target:
+                    b = ds['b'][left:right, :]
+                if 's' in target or 'd' in target:
+                    m = ds['m'][left:right, :] + self.cate_size['b']
+                if 'd' in target:
+                    s = ds['s'][left:right, :] + self.cate_size['b'] + self.cate_size['m']
 
-                X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
-                X += [b, bm, bms]
-                Y = [ds['b_cate'][left:right],
-                     ds['m_cate'][left:right],
-                     ds['s_cate'][left:right],
-                     ds['d_cate'][left:right]]
+                if 'bmsd' in target:
+                    bm = np.concatenate([b, m], axis=1)
+                    bms = np.concatenate([b, m, s], axis=1)
+                    X += [b / (self.cate_size['b'] - 1), bm, bms]
+                elif 's' in target:
+                    bm = np.concatenate([b, m], axis=1)
+                    X += [bm]
+                elif 'd' in target:
+                    bms = np.concatenate([b, m, s], axis=1)
+                    X += [bms]
+                elif 'm' in target:
+                    X += [b / (self.cate_size['b'] - 1)]
+
+                Y = []
+                for t in ['b', 'm', 's', 'd']:
+                    if t in target:
+                        Y += [ds['%s_cate' % t][left:right]]
+                if target == 'bmsd':
+                    Y += [ds['cate'][left:right]]
             else:
                 X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
                 Y = ds['cate'][left:right]
@@ -153,7 +167,9 @@ class Classifier():
                 pbar.update(X[0].shape[0])
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
-    def train(self, data_root, out_dir, weight_path=None, weight_mode='score_weight', model_name=None):
+    def train(self, data_root, out_dir, target='bmsd', weight_path=None, weight_mode=None, model_name=None):
+        assert target in ['b', 'm', 's', 'd', 'bmsd']
+
         data_path = os.path.join(data_root, 'data.h5py')
         meta_path = os.path.join(data_root, 'meta')
         data = h5py.File(data_path, 'r')
@@ -163,23 +179,22 @@ class Classifier():
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
 
-        self.logger.info('# of classes: %s' % len(meta['y_vocab']))
-        self.num_classes = len(meta['y_vocab'])
+        self.logger.info('# of classes: %s' % self.cate_size[target])
 
         train = data['train']
         dev = data['dev']
 
-        self.logger.info('# of train samples: %s' % train['cate'].shape[0])
-        self.logger.info('# of dev samples: %s' % dev['cate'].shape[0])
+        c_name = target if target != 'bmsd' else 'b'
+        self.logger.info('# of train samples: %s' % train['{}_cate'.format(c_name)].shape[0])
+        self.logger.info('# of dev samples: %s' % dev['{}_cate'.format(c_name)].shape[0])
 
-        checkpoint_1 = ModelCheckpoint('{}_01'.format(self.weight_fname), monitor='val_dense_1_loss',
-                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
-        checkpoint_2 = ModelCheckpoint('{}_02'.format(self.weight_fname), monitor='val_dense_2_loss',
-                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
-        checkpoint_3 = ModelCheckpoint('{}_03'.format(self.weight_fname), monitor='val_dense_3_loss',
-                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
-        checkpoint_4 = ModelCheckpoint('{}_04'.format(self.weight_fname), monitor='val_dense_4_loss',
-                                       save_best_only=True, mode='min', period=opt.num_checkpoint)
+        callbacks = []
+        for i, t in enumerate(['b', 'm', 's', 'd', 'bmsd']):
+            if t in target:
+                monitor_name = 'val_{}_out_loss'.format(t) if target == 'bmsd' else 'val_loss'
+                callbacks += [ModelCheckpoint('{}_0{}'.format(self.weight_fname, i + 1),
+                    monitor=monitor_name,
+                    save_best_only=True, mode='min', period=opt.num_checkpoint)]
 
         # generate vocab matrix TODO
         '''
@@ -189,33 +204,33 @@ class Classifier():
             item = list(map(int, v.split('>')))
             vocab_mat[k] = np.array(item).reshape(1, 4)
         '''
-        textimg = network.TextBMSD()
-        model = textimg.get_model(self.cate_size)
+        model = network.get_model(target, self.cate_size)
         if weight_path is not None:
             if os.path.exists(weight_path):
                 model.load_weights(weight_path)
             else:
-                self.logger.info('Not exist path: {}'.format(weight_path))
+                raise Exception('Not exist path: {}'.format(weight_path))
 
         total_train_samples = train['uni'].shape[0]
         train_gen = self.get_sample_generator(train,
-                                              batch_size=opt.batch_size)
+                                              batch_size=opt.batch_size, target=target)
         self.steps_per_epoch = int(np.ceil(total_train_samples / float(opt.batch_size)))
 
         total_dev_samples = dev['uni'].shape[0]
         dev_gen = self.get_sample_generator(dev,
-                                            batch_size=opt.batch_size)
+                                            batch_size=opt.batch_size, target=target)
         self.validation_steps = int(np.ceil(total_dev_samples / float(opt.batch_size)))
 
         if not model_name:
             now = datetime.now()
             model_name = '{}-{}-{} {}:{}:{}'.format(now.year, now.month, now.day,
                     now.hour, now.minute, now.second)
-        tb_hist = keras.callbacks.TensorBoard(log_dir='./graph/{0}'.format(model_name),
-                histogram_freq=0, write_graph=True, write_images=True)
+        callbacks += [keras.callbacks.TensorBoard(log_dir='./graph/{0}'.format(model_name),
+                      histogram_freq=0, write_graph=True, write_images=True)]
 
         if weight_mode == 'class_weight':
-            label = list(np.argmax(train['cate'], axis=1)) + list(np.argmax(dev['cate'], axis=1))
+            label = list(np.argmax(train['{}_cate'.format(target)], axis=1))\
+                    + list(np.argmax(dev['{}_cate'.format(target)], axis=1))
             weights = class_weight.compute_class_weight('balanced',
                     np.unique(label), label)
             self.logger.info('class weight length: {}'.format(len(weights)))
@@ -252,11 +267,7 @@ class Classifier():
                             validation_steps=self.validation_steps,
                             shuffle=True,
                             class_weight=class_weights,
-                            callbacks=[checkpoint_1,
-                                checkpoint_2,
-                                checkpoint_3,
-                                checkpoint_4,
-                                tb_hist])
+                            callbacks=callbacks)
 
         model.load_weights(self.weight_fname) # loads from checkout point if exists
         open(self.model_fname + '.json', 'w').write(model.to_json())
