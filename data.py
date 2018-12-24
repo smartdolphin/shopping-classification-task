@@ -149,17 +149,22 @@ def csv_worker(data):
             label = classes[i]
             tkns = list(map(int, label.split('>')))
             b, m, s, d = tkns
-            assert b in inv_cate1['b']
-            assert m in inv_cate1['m']
+            if b != -1:
+                assert b in inv_cate1['b']
+                b = inv_cate1['b'][b]
+            if m != -1:
+                assert m in inv_cate1['m']
+                m = inv_cate1['m'][m]
             assert s in inv_cate1['s']
             assert d in inv_cate1['d']
-            b = inv_cate1['b'][b]
-            m = inv_cate1['m'][m]
             s = inv_cate1['s'][s]
             d = inv_cate1['d'][d]
             pid = data['pid'][i].decode('utf-8')
 
-            assert label in meta['y_vocab']
+            n_class = ''
+            if b != -1 and m != -1:
+                assert label in meta['y_vocab']
+                n_class = meta['y_vocab'][label]
 
             df.loc[i] = [data['brand'][i].decode('utf-8'),
                          data['maker'][i].decode('utf-8'),
@@ -170,7 +175,7 @@ def csv_worker(data):
                          data['updttm'][i].decode('utf-8'),
                          label,
                          b, m, s, d,
-                         meta['y_vocab'][label]]
+                         n_class]
     except Exception:
         raise Exception(''.join(traceback.format_exception(*sys.exc_info())))
     return df
