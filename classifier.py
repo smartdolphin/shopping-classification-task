@@ -269,9 +269,11 @@ class Classifier():
                             class_weight=class_weights,
                             callbacks=callbacks)
 
-        model.load_weights(self.weight_fname) # loads from checkout point if exists
-        open(self.model_fname + '.json', 'w').write(model.to_json())
-        model.save(self.model_fname + '.h5')
+        for i, t in enumerate(['b', 'm', 's', 'd', 'bmsd']):
+            if t in target:
+                model.load_weights('{}_0{}'.format(self.weight_fname, i+1)) # loads from checkout point if exists
+                open('{}_0{}.json'.format(self.model_fname, i+1), 'w').write(model.to_json())
+                model.save('{}_0{}.h5'.format(self.model_fname, i+1))
         data.close()
 
 
