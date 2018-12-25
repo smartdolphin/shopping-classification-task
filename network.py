@@ -222,18 +222,7 @@ class TextM:
         b_dense = BatchNormalization()(b_dense)
         b_dense = Activation('relu', name='b_relu_2')(b_dense)
 
-        # cnn
         char_in = Input((max_len,), name="input_c")
-        cnn_embd = Embedding(opt.char_vocab_size,
-                             opt.embd_size,
-                             name='cnn_embd')(char_in)
-        x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(cnn_embd)
-        x = MaxPooling1D(2)(x)
-        x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(x)
-        x = GlobalMaxPooling1D()(x)
-        x = Dropout(0.5)(x)
-        cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
-
         uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
         pair = concatenate([b_dense, uni_embd, img_feat, cnn_out])
@@ -444,18 +433,7 @@ class TextBMSD:
         m_uni_embd_mat = dot([m_embd, w_uni_mat], axes=1)
         m_uni_embd = Reshape((opt.embd_size, ))(m_uni_embd_mat)
 
-        # m cnn
-        m_cnn_embd = Embedding(opt.char_vocab_size,
-                               opt.embd_size,
-                               name='m_cnn_embd')(char_in)
-        m_x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(m_cnn_embd)
-        m_x = MaxPooling1D(2)(m_x)
-        m_x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(m_x)
-        m_x = GlobalMaxPooling1D()(m_x)
-        m_x = Dropout(0.5)(m_x)
-        m_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(m_x)
-
-        m_pair = concatenate([b_dense, m_uni_embd, img_feat, m_cnn_out])
+        m_pair = concatenate([b_dense, m_uni_embd, img_feat])
         m_embd_out = Dropout(rate=0.5)(m_pair)
         m_relu = Activation('relu', name='m_relu')(m_embd_out)
         m_out = Dense(num_classes['m'], activation=activation, name='m_out')(m_relu)
