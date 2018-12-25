@@ -172,7 +172,7 @@ class TextB:
         x = Dropout(0.5)(x)
         cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
         pair = concatenate([uni_embd, img_feat, cnn_out])
-        embd_out = BatchNormalization()(pair)
+        embd_out = Dropout(rate=0.5)(pair)
         relu = Activation('relu', name='relu')(embd_out)
         outputs = Dense(num_classes['b'], activation=activation, name='b_out')(relu)
         model = Model(inputs=[t_uni, w_uni, char_in, img], outputs=outputs)
@@ -221,7 +221,6 @@ class TextM:
         b_dense = Dense(opt.embd_size // 4)(b_dense)
         b_dense = BatchNormalization()(b_dense)
         b_dense = Activation('relu', name='b_relu_2')(b_dense)
-        b_dense = Dropout(rate=0.5)(b_dense)
 
         # cnn
         char_in = Input((max_len,), name="input_c")
@@ -238,7 +237,7 @@ class TextM:
         uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
         pair = concatenate([b_dense, uni_embd, img_feat, cnn_out])
-        embd_out = BatchNormalization()(pair)
+        embd_out = Dropout(rate=0.5)(pair)
         relu = Activation('relu', name='m_relu')(embd_out)
         outputs = Dense(num_classes['m'], activation=activation, name='m_out')(relu)
         model = Model(inputs=[t_uni, w_uni, char_in, img, b_in], outputs=outputs)
@@ -366,7 +365,7 @@ class TextD:
         cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
 
         d_pair = concatenate([bms_seq, uni_embd, img_feat, cnn_out])
-        d_embd_out = BatchNormalization()(d_pair)
+        d_embd_out = Dropout(rate=0.5)(d_pair)
         d_relu = Activation('relu', name='relu')(d_embd_out)
         outputs = Dense(num_classes['d'], activation=activation, name='d_out')(d_relu)
         model = Model(inputs=[t_uni, w_uni, char_in, img, bms_in], outputs=outputs)
@@ -425,7 +424,7 @@ class TextBMSD:
         b_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(b_x)
 
         b_pair = concatenate([b_uni_embd, img_feat, b_cnn_out])
-        b_embd_out = BatchNormalization()(b_pair)
+        b_embd_out = Dropout(rate=0.5)(b_pair)
         b_relu = Activation('relu', name='b_relu')(b_embd_out)
         b_out = Dense(num_classes['b'], activation=activation, name='b_out')(b_relu)
 
@@ -437,7 +436,6 @@ class TextBMSD:
         b_dense = Dense(opt.embd_size // 4)(b_dense)
         b_dense = BatchNormalization()(b_dense)
         b_dense = Activation('relu', name='b_relu_2')(b_dense)
-        b_dense = Dropout(rate=0.5)(b_dense)
 
         embd_m = Embedding(voca_size,
                            opt.embd_size,
@@ -458,7 +456,7 @@ class TextBMSD:
         m_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(m_x)
 
         m_pair = concatenate([b_dense, m_uni_embd, img_feat, m_cnn_out])
-        m_embd_out = BatchNormalization()(m_pair)
+        m_embd_out = Dropout(rate=0.5)(m_pair)
         m_relu = Activation('relu', name='m_relu')(m_embd_out)
         m_out = Dense(num_classes['m'], activation=activation, name='m_out')(m_relu)
 
@@ -488,7 +486,7 @@ class TextBMSD:
         s_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(s_x)
 
         s_pair = concatenate([bm_seq, s_uni_embd, img_feat, s_cnn_out])
-        s_embd_out = BatchNormalization()(s_pair)
+        s_embd_out = Dropout(rate=0.5)(s_pair)
         s_relu = Activation('relu', name='s_relu')(s_embd_out)
         s_out = Dense(num_classes['s'], activation=activation, name='s_out')(s_relu)
 
@@ -518,13 +516,13 @@ class TextBMSD:
         d_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(d_x)
 
         d_pair = concatenate([bms_seq, d_uni_embd, img_feat, d_cnn_out])
-        d_embd_out = BatchNormalization()(d_pair)
+        d_embd_out = Dropout(rate=0.5)(d_pair)
         d_relu = Activation('relu', name='d_relu')(d_embd_out)
         d_out = Dense(num_classes['d'], activation=activation, name='d_out')(d_relu)
 
         # bmsd cate
         bmsd_pair = concatenate([b_out, m_out, s_out, d_out])
-        bmsd_pair = BatchNormalization()(bmsd_pair)
+        bmsd_pair = Dropout(rate=0.5)(bmsd_pair)
         bmsd_relu = Activation('relu', name='bmsd_relu')(bmsd_pair)
         bmsd_out = Dense(num_classes['bmsd'], activation=activation, name='bmsd_out')(bmsd_relu)
 
