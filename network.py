@@ -452,18 +452,7 @@ class TextBMSD:
                                 name='bm_embd_seq')(bm_in)
         bm_seq = SimpleRNN(opt.embd_size // 2)(embd_bm_seq)
 
-        # s cnn
-        s_cnn_embd = Embedding(opt.char_vocab_size,
-                               opt.embd_size,
-                               name='s_cnn_embd')(char_in)
-        s_x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(s_cnn_embd)
-        s_x = MaxPooling1D(2)(s_x)
-        s_x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(s_x)
-        s_x = GlobalMaxPooling1D()(s_x)
-        s_x = Dropout(0.5)(s_x)
-        s_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(s_x)
-
-        s_pair = concatenate([bm_seq, s_uni_embd, img_feat, s_cnn_out])
+        s_pair = concatenate([bm_seq, s_uni_embd, img_feat])
         s_embd_out = Dropout(rate=0.5)(s_pair)
         s_relu = Activation('relu', name='s_relu')(s_embd_out)
         s_out = Dense(num_classes['s'], activation=activation, name='s_out')(s_relu)
@@ -482,18 +471,7 @@ class TextBMSD:
                                  name='bms_embd_seq')(bms_in)
         bms_seq = SimpleRNN(opt.embd_size // 2)(embd_bms_seq)
 
-        # d cnn
-        d_cnn_embd = Embedding(opt.char_vocab_size,
-                               opt.embd_size,
-                               name='d_cnn_embd')(char_in)
-        d_x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(d_cnn_embd)
-        d_x = MaxPooling1D(2)(d_x)
-        d_x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(d_x)
-        d_x = GlobalMaxPooling1D()(d_x)
-        d_x = Dropout(0.5)(d_x)
-        d_cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(d_x)
-
-        d_pair = concatenate([bms_seq, d_uni_embd, img_feat, d_cnn_out])
+        d_pair = concatenate([bms_seq, d_uni_embd, img_feat])
         d_embd_out = Dropout(rate=0.5)(d_pair)
         d_relu = Activation('relu', name='d_relu')(d_embd_out)
         d_out = Dense(num_classes['d'], activation=activation, name='d_out')(d_relu)
