@@ -499,7 +499,7 @@ class TextBMSD:
         d_out = Dense(num_classes['d'], activation=activation, name='d_out')(d_relu)
 
         # bmsd cate
-        bmsd_pair = concatenate([b_out, m_out, s_out, d_out])
+        bmsd_pair = concatenate([b_relu, m_relu, s_relu, d_relu])
         bmsd_pair = Dropout(rate=0.5)(bmsd_pair)
         bmsd_relu = Activation('relu', name='bmsd_relu')(bmsd_pair)
         bmsd_out = Dense(num_classes['bmsd'], activation=activation, name='bmsd_out')(bmsd_relu)
@@ -511,7 +511,7 @@ class TextBMSD:
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
         optm = keras.optimizers.Nadam(opt.lr)
-        metrics = [top1_acc, fbeta_score_macro]
+        metrics = [top1_acc]
 
         model.compile(loss='categorical_crossentropy',
                       optimizer=optm,
