@@ -48,12 +48,12 @@ class Classifier():
         self.logger = get_logger('Classifier')
         self.cate_size = {'b': 57, 'm': 552, 's': 3190, 'd': 404, 'bmsd': 4215}
 
-    def get_sample_generator(self, ds, batch_size, target, raise_stop_event=False):
+    def get_sample_generator(self, ds, batch_size, target=None, raise_stop_event=False):
         left, limit = 0, ds['uni'].shape[0]
         while True:
             right = min(left + batch_size, limit)
 
-            if opt.multi_label is True:
+            if opt.multi_label is True and target is not None:
                 X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'char', 'img']]
                 if 'm' in target or 's' in target or 'd' in target:
                     b = ds['b'][left:right, :]
@@ -137,14 +137,13 @@ class Classifier():
         meta_path = os.path.join(data_root, 'meta')
         meta = cPickle.loads(open(meta_path, 'rb').read())
 
-        model_fname = os.path.join(model_root, 'model.h5')
         self.logger.info('# of classes(train): %s' % len(meta['y_vocab']))
         if mode == 'h5':
+            model_fname = os.path.join(model_root, 'model.h5')
             model = load_model(model_fname,
                                custom_objects={'top1_acc': top1_acc})
         elif mode == 'weights':
-            textimg = TextImage()
-            model = textimg.get_model(len(meta['y_vocab']))
+            model = network.get_model('bmsd', self.cate_size)
             model.load_weights(os.path.join(model_root, 'weights'))
         else:
             raise Exception('Unknown mode: {}'.format(mode))
@@ -156,14 +155,32 @@ class Classifier():
         test = test_data[test_div]
         batch_size = opt.batch_size
         pred_y = []
-        test_gen = ThreadsafeIter(self.get_sample_generator(test, batch_size, raise_stop_event=True))
+        test_gen = ThreadsafeIter(self.get_sample_generator(test,
+                                                            batch_size=batch_size,
+                                                            target='bmsd',
+                                                            raise_stop_event=True))
         total_test_samples = test['uni'].shape[0]
         with tqdm.tqdm(total=total_test_samples) as pbar:
             for chunk in test_gen:
                 total_test_samples = test['uni'].shape[0]
                 X, _ = chunk
+                x_size = len(X)
+                offset = 4  # uni, w_uni, char, img
+                batch_size = X[0].shape[0]
+                for idx in range(x_size - offset):
+                    _xs = X[:offset + idx]
+                    # add dummy x
+                    _xs += [np.zeros((batch_size, dim + 1)) for dim in range(idx, x_size - offset)]
+                    _preds = model.predict(_xs)
+                    # select sequence y prediction
+                    _y = np.array([np.argmax(y) for y in _preds[idx]])
+                    _y = _y.reshape(batch_size, -1)
+                    if idx == 0:
+                        X[offset + idx] = _y
+                    else:
+                        X[offset + idx] = np.concatenate([X[offset + idx - 1]] + [_y], axis=1)
                 _pred_y = model.predict(X)
-                pred_y.extend([np.argmax(y) for y in _pred_y])
+                pred_y.extend([np.argmax(y) for y in _pred_y[-1]])
                 pbar.update(X[0].shape[0])
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
