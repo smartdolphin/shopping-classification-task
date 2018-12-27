@@ -616,9 +616,41 @@ class Data:
         rets = [make_csv_content((Data, data_root, our_dir, data_path, target)) for data_path in data_list]
         self.logger.info('{} jobs finish'.format(len(cfg_opt.train_data_list)))
 
+    def decode_vocab(self, out_path):
+        if six.PY2:
+            cate1 = json.loads(open('../cate1.json').read())
+        else:
+            cate1 = json.loads(open('../cate1.json', 'rb').read().decode('utf-8'))
+
+        self.load_y_vocab()
+        inv_y_vocab = {v: k for k, v in six.iteritems(self.y_vocab)}
+        inv_cate1 = self.get_inverted_cate1(cate1)
+
+        rets = []
+        for y in tqdm.trange(len(self.y_vocab)):
+            label = inv_y_vocab[y]
+            tkns = list(map(int, label.split('>')))
+            b, m, s, d = tkns
+            assert b in inv_cate1['b']
+            assert m in inv_cate1['m']
+            assert s in inv_cate1['s']
+            assert d in inv_cate1['d']
+            tpl = '{b}\t{m}\t{s}\t{d}'
+            b = inv_cate1['b'][b]
+            m = inv_cate1['m'][m]
+            s = inv_cate1['s'][s]
+            d = inv_cate1['d'][d]
+            rets.append(tpl.format(b=b, m=m, s=s, d=d))
+        with open(out_path, 'w', encoding='utf-8') as fout:
+            for i in tqdm.trange(len(self.y_vocab)):
+                fout.write(rets[i])
+                fout.write('\n')
+        self.logger.info('save to {}'.format(out_path))
+
 
 if __name__ == '__main__':
     data = Data()
     fire.Fire({'make_db': data.make_db,
                'make_csv': data.make_csv,
+               'decode_vocab': data.decode_vocab,
                'build_y_vocab': data.build_y_vocab})
