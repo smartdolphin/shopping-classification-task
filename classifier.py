@@ -26,12 +26,14 @@ import keras
 import keras.backend as K
 
 import network
-
+import metric
+from collections import defaultdict
 from datetime import datetime
 from keras.models import load_model
 from keras.callbacks import ModelCheckpoint
 from six.moves import zip, cPickle
 from sklearn.utils import class_weight
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 from misc import get_logger, Option
 
@@ -133,7 +135,7 @@ class Classifier():
                 fout.write(ans)
                 fout.write('\n')
 
-    def predict(self, data_root, model_root, test_root, test_div, out_path, readable=False, mode='h5'):
+    def predict(self, data_root, model_root, test_root, test_div, out_path, readable=False, mode='h5', cf_map=False):
         meta_path = os.path.join(data_root, 'meta')
         meta = cPickle.loads(open(meta_path, 'rb').read())
 
@@ -161,9 +163,12 @@ class Classifier():
                                                             raise_stop_event=True))
         total_test_samples = test['uni'].shape[0]
         with tqdm.tqdm(total=total_test_samples) as pbar:
+            if cf_map is True:
+                pred_dic = defaultdict()
+                true_dic = defaultdict()
             for chunk in test_gen:
                 total_test_samples = test['uni'].shape[0]
-                X, _ = chunk
+                X, Y = chunk
                 x_size = len(X)
                 offset = 4  # uni, w_uni, char, img
                 batch_size = X[0].shape[0]
@@ -172,6 +177,15 @@ class Classifier():
                     # add dummy x
                     _xs += [np.zeros((batch_size, dim + 1)) for dim in range(idx, x_size - offset)]
                     _preds = model.predict(_xs)
+                    if cf_map is True:
+                        if idx not in pred_dic:
+                            pred_dic[idx] = np.argmax(_preds[idx], axis=1)
+                            true_dic[idx] = np.argmax(Y[idx], axis=1)
+                        else:
+                            pred_dic[idx] = np.concatenate([pred_dic[idx], np.argmax(_preds[idx], axis=1)])
+                            true_dic[idx] = np.concatenate([true_dic[idx], np.argmax(Y[idx], axis=1)])
+                        if len(pred_dic[idx]) != len(true_dic[idx]):
+                            raise Exception('{} != {}'.format(len(pred_dic[idx]), len(true_dic[idx])))
                     # select sequence y prediction
                     _y = np.array([np.argmax(y) for y in _preds[idx]])
                     _y = _y.reshape(batch_size, -1)
@@ -180,8 +194,29 @@ class Classifier():
                     else:
                         X[offset + idx] = np.concatenate([X[offset + idx - 1]] + [_y], axis=1)
                 _pred_y = model.predict(X)
+                if cf_map is True:
+                    if 3 not in pred_dic:
+                        pred_dic[3] = np.argmax(_pred_y[3], axis=1)
+                        true_dic[3] = np.argmax(Y[3], axis=1)
+                        pred_dic[4] = np.argmax(_pred_y[4], axis=1)
+                        true_dic[4] = np.argmax(Y[4], axis=1)
+                    else:
+                        pred_dic[3] = np.concatenate([pred_dic[3], np.argmax(_pred_y[3], axis=1)])
+                        true_dic[3] = np.concatenate([true_dic[3], np.argmax(Y[3], axis=1)])
+                        pred_dic[4] = np.concatenate([pred_dic[4], np.argmax(_pred_y[4], axis=1)])
+                        true_dic[4] = np.concatenate([true_dic[4], np.argmax(Y[4], axis=1)])
                 pred_y.extend([np.argmax(y) for y in _pred_y[-1]])
                 pbar.update(X[0].shape[0])
+            if cf_map is True:
+                cate_dic = {0: 'b', 1: 'm', 2: 's', 3: 'd', 4: 'bmsd'}
+                for idx, cate in cate_dic.items():
+                    y_test, y_pred = true_dic[idx], pred_dic[idx]
+                    top1_acc = accuracy_score(y_test, y_pred)
+                    conf_mat = confusion_matrix(y_test, y_pred)
+                    classes = [label for label in range(self.cate_size[cate])]
+                    metric.plot_confusion_matrix(conf_mat, classes,
+                                                 '{}_cf_{}.png'.format(cate, top1_acc),
+                                                 title='{} acc: {}'.format(cate, top1_acc))
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
     def train(self, data_root, out_dir, target='bmsd', weight_path=None, weight_mode=None, model_name=None):
