@@ -57,7 +57,7 @@ def plot_confusion_matrix(cm, class_names, save_path, normalize=False, title='co
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.title(title)
     plt.colorbar()
-    tick_marks = np.arrange(len(class_names))
+    tick_marks = np.arange(len(class_names))
     plt.xticks(tick_marks, class_names, rotation=45)
     plt.yticks(tick_marks, class_names)
     fmt = '.2f' if normalize else '.0f'
