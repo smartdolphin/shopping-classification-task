@@ -145,7 +145,7 @@ class Classifier():
             model_fname = os.path.join(model_root, 'model.h5')
             model = load_model(model_fname,
                                custom_objects={'top1_acc': top1_acc})
-        elif mode == 'weights':
+        elif opt.weight_list is None and mode == 'weights':
             model = network.get_model('bmsd', self.cate_size)
             model.load_weights(os.path.join(model_root, 'weights'))
         else:
@@ -177,6 +177,8 @@ class Classifier():
                     _xs = X[:offset + idx]
                     # add dummy x
                     _xs += [np.zeros((batch_size, dim + 1)) for dim in range(idx, x_size - offset)]
+                    if opt.weight_list is not None:
+                        model.load_weights(opt.weight_list[idx])
                     _preds = model.predict(_xs)
                     if cf_map is True:
                         if idx not in pred_dic:
@@ -194,6 +196,8 @@ class Classifier():
                         X[offset + idx] = _y
                     else:
                         X[offset + idx] = np.concatenate([X[offset + idx - 1]] + [_y], axis=1)
+                if opt.weight_list is not None:
+                    model.load_weights(opt.weight_list[3])
                 _pred_y = model.predict(X)
                 if cf_map is True:
                     if 3 not in pred_dic:
