@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import keras.backend as K
 import matplotlib.pyplot as plt
+import itertools
 
 
 def fbeta_score_macro(y_true, y_pred, beta=1, threshold=0.5):
@@ -47,7 +48,13 @@ def arena_score(y_true, y_pred, vocab_matrix=None):
     return K.mean(K.sum(target * score, axis=-1) * 1./4)
 
 
-def plot_confusion_matrix(cm, class_names, save_path, normalize=False, title='confusion matrix', cmap=plt.cm.Blues):
+def plot_confusion_matrix(cm,
+                          class_names,
+                          save_path,
+                          normalize=False,
+                          text=True,
+                          title='confusion matrix',
+                          cmap=plt.cm.Blues):
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         print('Normalized confusion matrix')
@@ -63,9 +70,10 @@ def plot_confusion_matrix(cm, class_names, save_path, normalize=False, title='co
     fmt = '.2f' if normalize else '.0f'
     thresh = cm.max() / 2
 
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, format(cm[i, j], fmt), horizontalalignment='center',
-                color='white' if cm[i, j] > thresh else 'black')
+    if text:
+        for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+            plt.text(j, i, format(cm[i, j], fmt), horizontalalignment='center',
+                    color='white' if cm[i, j] > thresh else 'black')
     plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
