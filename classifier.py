@@ -22,6 +22,7 @@ import h5py
 import tqdm
 import numpy as np
 import six
+import seaborn as sn
 import keras
 import keras.backend as K
 
@@ -208,15 +209,18 @@ class Classifier():
                 pred_y.extend([np.argmax(y) for y in _pred_y[-1]])
                 pbar.update(X[0].shape[0])
             if cf_map is True:
-                cate_dic = {0: 'b', 1: 'm', 2: 's', 3: 'd', 4: 'bmsd'}
-                for idx, cate in cate_dic.items():
+                for (idx, cate, size), font_scale, dpi in zip(enumerate(self.cate_size.items()),
+                                                              [0.1, 0.01, 0.001, 0.01, 0.001],
+                                                              [800, 800, 4000, 800, 4000]):
                     y_test, y_pred = true_dic[idx], pred_dic[idx]
                     top1_acc = accuracy_score(y_test, y_pred)
                     conf_mat = confusion_matrix(y_test, y_pred)
-                    classes = [label for label in range(self.cate_size[cate])]
-                    metric.plot_confusion_matrix(conf_mat, classes,
-                                                 '{}_cf_{}.png'.format(cate, top1_acc),
-                                                 title='{} acc: {}'.format(cate, top1_acc))
+                    classes = [label for label in range(size)]
+                    sn.set(font_scale=font_scale)
+                    svm = sn.heatmap(conf_mat, annot=True if idx == 0 else False, cmap='Blues')
+                    figure = svm.get_figure()
+                    figure.savefig('{}_conf_{:.2f}.png'.format(cate, top1_acc), dpi=dpi)
+                    figure.clf()
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
     def train(self, data_root, out_dir, target='bmsd', weight_path=None, weight_mode=None, model_name=None):
