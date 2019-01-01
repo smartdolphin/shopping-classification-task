@@ -270,14 +270,17 @@ class Data:
             return [None] * 3
         Y = to_categorical(y_val, len(self.y_vocab))
 
+        pid = h['pid'][i]
         product = h['product'][i]
         if six.PY3:
+            pid = pid.decode('utf-8')
             product = product.decode('utf-8')
         product = self.filter_func(product)
         product = re_sc.sub(' ', product).strip().split()
         words = [w.strip() for w in product]
         words = [w for w in words
                  if len(w) >= opt.min_word_length and len(w) < opt.max_word_length]
+        words = [pid] + words
         if not words:
             return [None] * 3
 
