@@ -28,6 +28,7 @@ import h5py
 import numpy as np
 import mmh3
 import six
+from orderedset import OrderedSet
 from keras.utils.np_utils import to_categorical
 from kor_char_parser import decompose_str_as_one_hot
 from six.moves import cPickle
@@ -188,7 +189,7 @@ class Data:
     def __init__(self):
         self.logger = get_logger('data')
         self.cate_size = {'b': 57, 'm': 552, 's': 3190, 'd': 404}
-        self.filter_words = set()
+        self.filter_words = OrderedSet()
         if os.path.exists(opt.filter_path):
             with open(opt.filter_path, 'r', encoding='utf-8') as f:
                 for line in f.readlines():
