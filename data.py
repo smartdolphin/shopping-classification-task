@@ -310,8 +310,8 @@ class Data:
         # image feature
         img = h['img_feat'][i]
 
-        # price feature
-        price = -1 if opt.mode == 'seq' else h['price'][i]
+        # pid feature
+        pid_hash = hash_func(pid)
 
         # set multi y for each category
         cate_y = {}
@@ -320,7 +320,7 @@ class Data:
             cate_y[cate] = 0 if c_label == -1 else c_label - 1
             cate_y['{}_cate'.format(cate)] = to_categorical(cate_y[cate], self.cate_size[cate])
 
-        return Y, cate_y, (x, v, c, img, price)
+        return Y, cate_y, (x, v, c, img, pid_hash)
 
     def filter_func(self, sentence):
         for filter_str in self.filter_words:
@@ -335,7 +335,7 @@ class Data:
         g.create_dataset('w_uni', shape, chunks=True, dtype=np.float32)
         g.create_dataset('char', shape, chunks=True, dtype=np.float32)
         g.create_dataset('img', img_shape, chunks=True, dtype=np.float32)
-        g.create_dataset('price', (size, 1), chunks=True, dtype=np.int32)
+        g.create_dataset('pid_hash', (size, 1), chunks=True, dtype=np.int32)
         g.create_dataset('cate', (size, num_classes), chunks=True, dtype=np.int32)
         g.create_dataset('b', (size, 1), chunks=True, dtype=np.int32)
         g.create_dataset('m', (size, 1), chunks=True, dtype=np.int32)
@@ -356,7 +356,7 @@ class Data:
         chunk['w_uni'] = np.zeros(shape=chunk_shape, dtype=np.float32)
         chunk['char'] = np.zeros(shape=chunk_shape, dtype=np.float32)
         chunk['img'] = np.zeros(shape=img_shape, dtype=np.float32)
-        chunk['price'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
+        chunk['pid_hash'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
         chunk['cate'] = np.zeros(shape=(chunk_size, num_classes), dtype=np.int32)
         chunk['b'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
         chunk['m'] = np.zeros(shape=(chunk_size, 1), dtype=np.int32)
@@ -376,7 +376,7 @@ class Data:
         dataset['w_uni'][offset:offset + num, :] = chunk['w_uni'][:num]
         dataset['char'][offset:offset + num, :] = chunk['char'][:num]
         dataset['img'][offset:offset + num, :] = chunk['img'][:num]
-        dataset['price'][offset:offset + num, :] = chunk['price'][:num]
+        dataset['pid_hash'][offset:offset + num, :] = chunk['pid_hash'][:num]
         dataset['cate'][offset:offset + num] = chunk['cate'][:num]
         dataset['b'][offset:offset + num] = chunk['b'][:num]
         dataset['m'][offset:offset + num] = chunk['m'][:num]
@@ -396,7 +396,7 @@ class Data:
         A['w_uni'][offset:offset + num, :] = B['w_uni'][:num]
         A['char'][offset:offset + num, :] = B['char'][:num]
         A['img'][offset:offset + num, :] = B['img'][:num]
-        A['price'][offset:offset + num, :] = B['price'][:num]
+        A['pid_hash'][offset:offset + num, :] = B['pid_hash'][:num]
         A['cate'][offset:offset + num, y_offset:y_offset + y_num] = B['cate'][:num]
         A['b'][offset:offset + num, y_offset:y_offset + y_num] = B['b'][:num]
         A['m'][offset:offset + num, y_offset:y_offset + y_num] = B['m'][:num]
@@ -478,7 +478,7 @@ class Data:
             for data_idx, (pid, y, y_cate, vw) in data:
                 if y is None:
                     continue
-                v, w, ch, img, price = vw
+                v, w, ch, img, pid_hash = vw
                 is_train = train_indices[sample_idx + data_idx]
                 if all_dev:
                     is_train = False
@@ -492,7 +492,7 @@ class Data:
                 c['w_uni'][idx] = w
                 c['char'][idx] = ch
                 c['img'][idx] = img
-                c['price'][idx] = price
+                c['pid_hash'][idx] = pid_hash
                 c['cate'][idx] = y
                 c['b'][idx] = y_cate['b']
                 c['m'][idx] = y_cate['m']
