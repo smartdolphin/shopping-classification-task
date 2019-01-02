@@ -136,21 +136,23 @@ class Classifier():
                 fout.write(ans)
                 fout.write('\n')
 
-    def predict(self, data_root, model_root, test_root, test_div, out_path, readable=False, mode='h5', cf_map=False):
+    def predict(self, data_root, model_root, test_root, test_div, out_path,
+                      readable=False, mode='h5', target='bmsd', cf_map=False):
         meta_path = os.path.join(data_root, 'meta')
         meta = cPickle.loads(open(meta_path, 'rb').read())
 
         self.logger.info('# of classes(train): %s' % len(meta['y_vocab']))
+        K.set_learning_phase(0)
+
         if mode == 'h5':
             model_fname = os.path.join(model_root, 'model.h5')
             model = load_model(model_fname,
                                custom_objects={'top1_acc': top1_acc})
         elif opt.weight_list is None and mode == 'weights':
-            model = network.get_model('bmsd', self.cate_size)
+            model = network.get_model(target, self.cate_size)
             model.load_weights(os.path.join(model_root, 'weights'))
         else:
             raise Exception('Unknown mode: {}'.format(mode))
-        K.set_learning_phase(0)
 
         test_path = os.path.join(test_root, 'data.h5py')
         test_data = h5py.File(test_path, 'r')
@@ -160,7 +162,7 @@ class Classifier():
         pred_y = []
         test_gen = ThreadsafeIter(self.get_sample_generator(test,
                                                             batch_size=batch_size,
-                                                            target='bmsd',
+                                                            target=target,
                                                             raise_stop_event=True))
         total_test_samples = test['uni'].shape[0]
         with tqdm.tqdm(total=total_test_samples) as pbar:
@@ -197,20 +199,21 @@ class Classifier():
                     else:
                         X[offset + idx] = np.concatenate([X[offset + idx - 1]] + [_y], axis=1)
                 if opt.weight_list is not None:
-                    model.load_weights(opt.weight_list[3])
-                _pred_y = model.predict(X)
-                if cf_map is True:
-                    if 3 not in pred_dic:
-                        pred_dic[3] = np.argmax(_pred_y[3], axis=1)
-                        true_dic[3] = np.argmax(Y[3], axis=1)
-                        pred_dic[4] = np.argmax(_pred_y[4], axis=1)
-                        true_dic[4] = np.argmax(Y[4], axis=1)
-                    else:
-                        pred_dic[3] = np.concatenate([pred_dic[3], np.argmax(_pred_y[3], axis=1)])
-                        true_dic[3] = np.concatenate([true_dic[3], np.argmax(Y[3], axis=1)])
-                        pred_dic[4] = np.concatenate([pred_dic[4], np.argmax(_pred_y[4], axis=1)])
-                        true_dic[4] = np.concatenate([true_dic[4], np.argmax(Y[4], axis=1)])
-                pred_y.extend([np.argmax(y) for y in _pred_y[-1]])
+                    model.load_weights(opt.weight_list[-1])
+                if target == 'd' or target == 'bmsd':
+                    _pred_y = model.predict(X)
+                    if cf_map is True:
+                        if 3 not in pred_dic:
+                            pred_dic[3] = np.argmax(_pred_y[3], axis=1)
+                            true_dic[3] = np.argmax(Y[3], axis=1)
+                            pred_dic[4] = np.argmax(_pred_y[4], axis=1)
+                            true_dic[4] = np.argmax(Y[4], axis=1)
+                        else:
+                            pred_dic[3] = np.concatenate([pred_dic[3], np.argmax(_pred_y[3], axis=1)])
+                            true_dic[3] = np.concatenate([true_dic[3], np.argmax(Y[3], axis=1)])
+                            pred_dic[4] = np.concatenate([pred_dic[4], np.argmax(_pred_y[4], axis=1)])
+                            true_dic[4] = np.concatenate([true_dic[4], np.argmax(Y[4], axis=1)])
+                    pred_y.extend([np.argmax(y) for y in _pred_y[-1]])
                 pbar.update(X[0].shape[0])
             if cf_map is True:
                 for idx, ((cate, size), font_scale, dpi) in enumerate(zip(self.cate_size.items(),
@@ -225,6 +228,8 @@ class Classifier():
                     figure = svm.get_figure()
                     figure.savefig('{}_conf_{:.2f}.png'.format(cate, top1_acc), dpi=dpi)
                     figure.clf()
+                    if target == cate:
+                        break
         self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
 
     def train(self, data_root, out_dir, target='bmsd', weight_path=None, weight_mode=None, model_name=None):
