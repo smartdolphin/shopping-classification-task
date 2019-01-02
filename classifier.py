@@ -213,9 +213,9 @@ class Classifier():
                 pred_y.extend([np.argmax(y) for y in _pred_y[-1]])
                 pbar.update(X[0].shape[0])
             if cf_map is True:
-                for (idx, cate, size), font_scale, dpi in zip(enumerate(self.cate_size.items()),
-                                                              [0.1, 0.01, 0.001, 0.01, 0.001],
-                                                              [800, 800, 4000, 800, 4000]):
+                for idx, ((cate, size), font_scale, dpi) in enumerate(zip(self.cate_size.items(),
+                                                                          [0.1, 0.01, 0.001, 0.01, 0.001],
+                                                                          [800, 800, 4000, 800, 4000])):
                     y_test, y_pred = true_dic[idx], pred_dic[idx]
                     top1_acc = accuracy_score(y_test, y_pred)
                     conf_mat = confusion_matrix(y_test, y_pred)
