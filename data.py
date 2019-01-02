@@ -323,6 +323,7 @@ class Data:
         return Y, cate_y, (x, v, c, img, pid_hash)
 
     def filter_func(self, sentence):
+        sentence = sentence.lower()
         for filter_str in self.filter_words:
             if filter_str in sentence:
                 sentence = sentence.replace(filter_str, '').strip()
