@@ -157,7 +157,7 @@ class TextB:
         w_uni = Input((max_len,), name="input_2")
         w_uni_mat = Reshape((max_len, 1))(w_uni)  # weight
 
-        uni_embd_mat = dot([t_uni_embd, w_uni_mat], axes=1)
+        uni_embd_mat = dot([t_uni_embd, w_uni_mat], normalize=True, axes=1)
         uni_embd = Reshape((opt.embd_size, ))(uni_embd_mat)
 
         # cnn
@@ -165,23 +165,28 @@ class TextB:
         cnn_embd = Embedding(opt.char_vocab_size,
                              opt.embd_size,
                              name='cnn_embd')(char_in)
-        x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same')(cnn_embd)
+        x = Conv1D(opt.num_filters, 7,  activation='relu', padding='same',
+                   kernel_initializer='he_normal')(cnn_embd)
         x = MaxPooling1D(2)(x)
-        x = Conv1D(opt.num_filters, 7, activation='relu', padding='same')(x)
+        x = Conv1D(opt.num_filters, 7, activation='relu', padding='same',
+                   kernel_initializer='he_normal')(x)
         x = GlobalMaxPooling1D()(x)
         x = Dropout(0.5)(x)
-        cnn_out = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
+        cnn_out = Dense(32, activation='relu', kernel_initializer='he_normal',
+                        kernel_regularizer=regularizers.l2(opt.weight_decay))(x)
         pair = concatenate([uni_embd, img_feat, cnn_out])
-        embd_out = Dropout(rate=0.5)(pair)
-        relu = Activation('relu', name='relu')(embd_out)
-        outputs = Dense(num_classes['b'], activation=activation, name='b_out')(relu)
+        out = BatchNormalization()(pair)
+        out = Activation('relu', name='relu1')(out)
+        out = Dropout(rate=0.5)(out)
+        outputs = Dense(num_classes['b'], kernel_initializer='he_normal',
+                        activation=activation, name='b_out')(out)
         model = Model(inputs=[t_uni, w_uni, char_in, img], outputs=outputs)
         if opt.graphviz:
             plot_model(model, to_file='b.png', show_shapes=True, show_layer_names=True)
         if opt.num_gpus > 1:
             model = ModelMGPU(model, gpus=opt.num_gpus)
-        optm = keras.optimizers.Nadam(opt.lr)
-        metrics = [top1_acc, fbeta_score_macro]
+        optm = keras.optimizers.Adamax(lr=opt.lr, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+        metrics = [top1_acc]
 
         model.compile(loss='categorical_crossentropy',
                       optimizer=optm,
