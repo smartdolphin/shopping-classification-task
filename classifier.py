@@ -39,6 +39,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 from misc import get_logger, Option
 
 opt = Option('./config.json')
+os.environ["CUDA_VISIBLE_DEVICES"] = opt.visible_gpu
 if six.PY2:
     cate1 = json.loads(open('../cate1.json').read())
 else:

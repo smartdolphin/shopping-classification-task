@@ -37,7 +37,8 @@
     "multi_label": true,
     "lr": 1e-4,
     "num_epochs": 100,
-    "batch_size": 30720,
+    "batch_size": 1024,
     "img_size": 2048,
-    "num_gpus": 4
+    "visible_gpu": "0,1,2,3",
+    "num_gpus": 1
 }
