@@ -504,19 +504,18 @@ class Data:
                 c['s_cate'][idx] = y_cate['s_cate']
                 c['d_cate'][idx] = y_cate['d_cate']
                 c['num'] += 1
-                if not is_train:
-                    c['pid'].append(np.string_(pid))
+                c['pid'].append(np.string_(pid))
                 for t in ['train', 'dev']:
                     if chunk[t]['num'] >= chunk_size:
                         self.copy_chunk(dataset[t], chunk[t], num_samples[t],
-                                        with_pid_field=t == 'dev')
+                                        with_pid_field=True)
                         num_samples[t] += chunk[t]['num']
                         chunk[t] = self.init_chunk(chunk_size, len(self.y_vocab))
             sample_idx += len(data)
         for t in ['train', 'dev']:
             if chunk[t]['num'] > 0:
                 self.copy_chunk(dataset[t], chunk[t], num_samples[t],
-                                with_pid_field=t == 'dev')
+                                with_pid_field=True)
                 num_samples[t] += chunk[t]['num']
 
         for div in ['train', 'dev']:

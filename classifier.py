@@ -19,6 +19,7 @@ import threading
 
 import fire
 import h5py
+import pandas as pd
 import tqdm
 import numpy as np
 import six
@@ -52,39 +53,32 @@ class Classifier():
         self.logger = get_logger('Classifier')
         self.cate_size = {'b': 57, 'm': 552, 's': 3190, 'd': 404, 'bmsd': 4215}
 
-    def get_sample_generator(self, ds, batch_size, target=None, raise_stop_event=False):
+    def get_sample_generator(self, ds, batch_size, target=None, raise_stop_event=False, cate_only=False, pred_val=None):
         left, limit = 0, ds['uni'].shape[0]
         while True:
             right = min(left + batch_size, limit)
 
             if opt.multi_label is True and target is not None:
-                X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'char', 'img']]
-                if 'm' in target or 's' in target or 'd' in target:
-                    b = ds['b'][left:right, :]
-                if 's' in target or 'd' in target:
-                    m = ds['m'][left:right, :] + self.cate_size['b']
-                if 'd' in target:
-                    s = ds['s'][left:right, :] + self.cate_size['b'] + self.cate_size['m']
-
-                if 'bmsd' in target:
-                    bm = np.concatenate([b, m], axis=1)
-                    bms = np.concatenate([b, m, s], axis=1)
-                    X += [b / (self.cate_size['b'] - 1), bm, bms]
-                elif 's' in target:
-                    bm = np.concatenate([b, m], axis=1)
-                    X += [bm]
-                elif 'd' in target:
-                    bms = np.concatenate([b, m, s], axis=1)
-                    X += [bms]
-                elif 'm' in target:
-                    X += [b / (self.cate_size['b'] - 1)]
-
-                Y = []
-                for t in ['b', 'm', 's', 'd']:
-                    if t in target:
-                        Y += [ds['%s_cate' % t][left:right]]
-                if target == 'bmsd':
-                    Y += [ds['cate'][left:right]]
+                if cate_only is False:
+                    X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'char', 'img']]
+                    Y = ds['%s_cate' % target][left:right]
+                else:
+                    X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
+                    if pred_val is None:
+                        _t = ds
+                        b = _t['b'][left:right, :]
+                        m = _t['m'][left:right, :] + self.cate_size['b']
+                        s = _t['s'][left:right, :] + self.cate_size['b'] + self.cate_size['m']
+                        d = _t['d'][left:right, :] + self.cate_size['b'] + self.cate_size['m'] + self.cate_size['d']
+                    else:
+                        _t = pred_val
+                        b = _t['b'][left:right].values.reshape(-1, 1)
+                        m = _t['m'][left:right].values.reshape(-1, 1) + self.cate_size['b']
+                        s = _t['s'][left:right].values.reshape(-1, 1) + self.cate_size['b'] + self.cate_size['m']
+                        d = _t['d'][left:right].values.reshape(-1, 1) + self.cate_size['b'] + self.cate_size['m'] + self.cate_size['s']
+                    bmsd = np.concatenate([b, m, s, d], axis=1)
+                    X += [bmsd]
+                    Y = ds['cate'][left:right]
             else:
                 X = [ds[t][left:right, :] for t in ['uni', 'w_uni', 'img']]
                 Y = ds['cate'][left:right]
@@ -101,11 +95,57 @@ class Classifier():
             inv_cate1[d] = {v: k for k, v in six.iteritems(cate1[d])}
         return inv_cate1
 
-    def write_prediction_result(self, data, pred_y, meta, out_path, readable):
+    def write_prediction_result(self, data, pred_y, meta, out_path, readable, is_train=False):
         pid_order = []
-        for data_path in DEV_DATA_LIST:
-            h = h5py.File(data_path, 'r')['dev']
-            pid_order.extend(h['pid'][::])
+        if is_train is False:
+            for data_path in DEV_DATA_LIST:
+                h = h5py.File(data_path, 'r')['dev']
+                pid_order.extend(h['pid'][::])
+        else:
+            pid_order.extend(data['pid'][::])
+
+        inv_cate1 = self.get_inverted_cate1(cate1)
+        rets = {}
+        for pid, b, m, s, d in zip(data['pid'], pred_y[0], pred_y[1], pred_y[2], pred_y[3]):
+            if six.PY3:
+                pid = pid.decode('utf-8')
+            if b not in inv_cate1['b']:
+                self.logger.info('b: {}'.format(b))
+            if m not in inv_cate1['m']:
+                self.logger.info('m: {}'.format(m))
+            if s not in inv_cate1['s']:
+                self.logger.info('s: {}'.format(s))
+            if d not in inv_cate1['d']:
+                self.logger.info('d: {}'.format(d))
+            assert b in inv_cate1['b']
+            assert m in inv_cate1['m']
+            assert s in inv_cate1['s']
+            assert d in inv_cate1['d']
+
+            tpl = '{pid}\t{b}\t{m}\t{s}\t{d}'
+            if readable:
+                b = inv_cate1['b'][b]
+                m = inv_cate1['m'][m]
+                s = inv_cate1['s'][s]
+                d = inv_cate1['d'][d]
+            rets[pid] = tpl.format(pid=pid, b=b, m=m, s=s, d=d)
+        no_answer = '{pid}\t-1\t-1\t-1\t-1'
+        with open(out_path, 'w') as fout:
+            for pid in pid_order:
+                if six.PY3:
+                    pid = pid.decode('utf-8')
+                ans = rets.get(pid, no_answer.format(pid=pid))
+                fout.write(ans)
+                fout.write('\n')
+
+    def write_infer_result(self, data, pred_y, meta, out_path, readable, is_train=False):
+        pid_order = []
+        if is_train is False:
+            for data_path in DEV_DATA_LIST:
+                h = h5py.File(data_path, 'r')['dev']
+                pid_order.extend(h['pid'][::])
+        else:
+            pid_order.extend(data['pid'][::])
 
         y2l = {i: s for s, i in six.iteritems(meta['y_vocab'])}
         y2l = list(map(lambda x: x[1], sorted(y2l.items(), key=lambda x: x[0])))
@@ -137,85 +177,113 @@ class Classifier():
                 fout.write(ans)
                 fout.write('\n')
 
-    def predict(self, data_root, model_root, test_root, test_div, out_path,
-                      readable=False, mode='h5', target='bmsd', cf_map=False):
+    def infer(self, data_root, model_root, test_root, test_div, out_path, csv_path,
+              readable=False, target='bmsd'):
         meta_path = os.path.join(data_root, 'meta')
         meta = cPickle.loads(open(meta_path, 'rb').read())
 
-        self.logger.info('# of classes(train): %s' % len(meta['y_vocab']))
         K.set_learning_phase(0)
-
-        if mode == 'h5':
-            model_fname = os.path.join(model_root, 'model.h5')
-            model = load_model(model_fname,
-                               custom_objects={'top1_acc': top1_acc})
-        elif opt.weight_list is None and mode == 'weights':
-            model = network.get_model(target, self.cate_size)
-            model.load_weights(os.path.join(model_root, 'weights'))
-        else:
-            raise Exception('Unknown mode: {}'.format(mode))
+        model = network.get_model('bmsd', self.cate_size)
+        self.logger.info('# of classes(train): %s' % len(meta['y_vocab']))
+        model.load_weights(model_root)
+        K.set_learning_phase(0)
 
         test_path = os.path.join(test_root, 'data.h5py')
         test_data = h5py.File(test_path, 'r')
 
         test = test_data[test_div]
         batch_size = opt.batch_size
+
+        # load pred val
+        df = pd.read_csv(csv_path, names=['pid', 'b', 'm', 's', 'd'],
+                         delimiter='\t', index_col=False, encoding='utf-8')
+        df['b'] = df['b'] - 1
+        df['m'] = df['m'] - 1
+        df['s'] = df['s'] - 1
+        df['d'] = df['d'] - 1
+        df['s'][df['s'] < 0] = 0
+        df['d'][df['d'] < 0] = 0
         pred_y = []
         test_gen = ThreadsafeIter(self.get_sample_generator(test,
                                                             batch_size=batch_size,
-                                                            target=target,
-                                                            raise_stop_event=True))
+                                                            target='bmsd',
+                                                            raise_stop_event=True,
+                                                            cate_only=True,
+                                                            pred_val=df))
         total_test_samples = test['uni'].shape[0]
         with tqdm.tqdm(total=total_test_samples) as pbar:
-            if cf_map is True:
-                pred_dic = defaultdict()
-                true_dic = defaultdict()
             for chunk in test_gen:
                 total_test_samples = test['uni'].shape[0]
-                X, Y = chunk
-                x_size = len(X)
-                offset = 4  # uni, w_uni, char, img
-                batch_size = X[0].shape[0]
-                for idx in range(x_size - offset):
-                    _xs = X[:offset + idx]
-                    # add dummy x
-                    _xs += [np.zeros((batch_size, dim + 1)) for dim in range(idx, x_size - offset)]
-                    if opt.weight_list is not None:
-                        model.load_weights(opt.weight_list[idx])
-                    _preds = model.predict(_xs)
-                    if cf_map is True:
-                        if idx not in pred_dic:
-                            pred_dic[idx] = np.argmax(_preds[idx], axis=1)
-                            true_dic[idx] = np.argmax(Y[idx], axis=1)
-                        else:
-                            pred_dic[idx] = np.concatenate([pred_dic[idx], np.argmax(_preds[idx], axis=1)])
-                            true_dic[idx] = np.concatenate([true_dic[idx], np.argmax(Y[idx], axis=1)])
-                        if len(pred_dic[idx]) != len(true_dic[idx]):
-                            raise Exception('{} != {}'.format(len(pred_dic[idx]), len(true_dic[idx])))
-                    # select sequence y prediction
-                    _y = np.array([np.argmax(y) for y in _preds[idx]])
-                    _y = _y.reshape(batch_size, -1)
-                    if idx == 0:
-                        X[offset + idx] = _y
-                    else:
-                        X[offset + idx] = np.concatenate([X[offset + idx - 1]] + [_y], axis=1)
-                if opt.weight_list is not None:
-                    model.load_weights(opt.weight_list[-1])
-                if target == 'd' or target == 'bmsd':
-                    _pred_y = model.predict(X)
-                    if cf_map is True:
-                        if 3 not in pred_dic:
-                            pred_dic[3] = np.argmax(_pred_y[3], axis=1)
-                            true_dic[3] = np.argmax(Y[3], axis=1)
-                            pred_dic[4] = np.argmax(_pred_y[4], axis=1)
-                            true_dic[4] = np.argmax(Y[4], axis=1)
-                        else:
-                            pred_dic[3] = np.concatenate([pred_dic[3], np.argmax(_pred_y[3], axis=1)])
-                            true_dic[3] = np.concatenate([true_dic[3], np.argmax(Y[3], axis=1)])
-                            pred_dic[4] = np.concatenate([pred_dic[4], np.argmax(_pred_y[4], axis=1)])
-                            true_dic[4] = np.concatenate([true_dic[4], np.argmax(Y[4], axis=1)])
-                    pred_y.extend([np.argmax(y) for y in _pred_y[-1]])
+                X, _ = chunk
+                _pred_y = model.predict(X)
+                pred_y.extend([np.argmax(y) for y in _pred_y])
                 pbar.update(X[0].shape[0])
+        self.write_infer_result(test, pred_y, meta, out_path, readable=readable)
+
+    def predict(self, data_root, test_root, test_div, out_path, readable=False,
+                mode='h5', target='b', cf_map=False, is_train=False):
+        meta_path = os.path.join(data_root, 'meta')
+        meta = cPickle.loads(open(meta_path, 'rb').read())
+
+        self.logger.info('# of classes(train): %s' % len(meta['y_vocab']))
+        K.set_learning_phase(0)
+        models = {}
+        for idx, cate in enumerate(['b', 'm', 's', 'd']):
+            if mode == 'h5':
+                model_fname = opt.model_path_list[idx]
+                model = load_model(model_fname,
+                                   custom_objects={'top1_acc': top1_acc})
+            elif mode == 'weights':
+                if target == 'bmsd':
+                    t = cate
+                else:
+                    t = target
+                model = network.get_model(t, self.cate_size)
+                model.load_weights(opt.weight_path_list[idx])
+            else:
+                raise Exception('Unknown mode: {}'.format(mode))
+            models[idx] = model
+
+        test_path = os.path.join(test_root, 'data.h5py')
+        test_data = h5py.File(test_path, 'r')
+
+        test = test_data[test_div]
+        batch_size = opt.batch_size
+        total_test_samples = test['uni'].shape[0]
+        with tqdm.tqdm(total=total_test_samples) as pbar:
+            pred_dic = defaultdict()
+            if cf_map is True:
+               true_dic = defaultdict()
+            for idx, cate in enumerate(['b', 'm', 's', 'd']):
+                for chunk in ThreadsafeIter(self.get_sample_generator(test,
+                                                            batch_size=batch_size,
+                                                            target=cate,
+                                                            raise_stop_event=True)):
+                    X, Y = chunk
+                    _pred_y = models[idx].predict(X)
+                    if idx not in pred_dic:
+                        _p = np.argmax(_pred_y, axis=1) + 1
+                        if cate == 's' or cate == 'd':
+                            _p[_p == 1] = -1
+                        pred_dic[idx] = _p
+                        if cf_map is True:
+                            _y = np.argmax(Y, axis=1) + 1
+                            if cate == 's' or cate == 'd':
+                                _y[_y == 1] = -1
+                            true_dic[idx] = _y
+                    else:
+                        _p = np.argmax(_pred_y, axis=1) + 1
+                        if cate == 's' or cate == 'd':
+                            _p[_p == 1] = -1
+                        pred_dic[idx] = np.concatenate([pred_dic[idx], _p])
+                        if cf_map is True:
+                            _y = np.argmax(Y, axis=1) + 1
+                            if cate == 's' or cate == 'd':
+                                _y[_y == 1] = -1
+                            true_dic[idx] = np.concatenate([true_dic[idx], _y])
+                            if len(pred_dic[idx]) != len(true_dic[idx]):
+                                raise Exception('{} != {}'.format(len(pred_dic[idx]), len(true_dic[idx])))
+                    pbar.update(X[0].shape[0] // 4)
             if cf_map is True:
                 for idx, ((cate, size), font_scale, dpi) in enumerate(zip(self.cate_size.items(),
                                                                           [0.1, 0.01, 0.001, 0.01, 0.001],
@@ -231,9 +299,9 @@ class Classifier():
                     figure.clf()
                     if target == cate:
                         break
-        self.write_prediction_result(test, pred_y, meta, out_path, readable=readable)
+        self.write_prediction_result(test, pred_dic, meta, out_path, readable=readable, is_train=False)
 
-    def train(self, data_root, out_dir, target='bmsd', weight_path=None, weight_mode=None, model_name=None):
+    def train(self, data_root, out_dir, target='bmsd', weight_path=None, weight_mode=None, model_name=None, cate_only=False):
         assert target in ['b', 'm', 's', 'd', 'bmsd']
 
         data_path = os.path.join(data_root, 'data.h5py')
@@ -256,8 +324,8 @@ class Classifier():
 
         callbacks = []
         for i, t in enumerate(['b', 'm', 's', 'd', 'bmsd']):
-            if t in target:
-                monitor_name = 'val_{}_out_loss'.format(t) if target == 'bmsd' else 'val_loss'
+            if t == target:
+                monitor_name = 'val_loss'
                 callbacks += [ModelCheckpoint('{}_0{}'.format(self.weight_fname, i + 1),
                     monitor=monitor_name,
                     save_best_only=True, mode='min', period=opt.num_checkpoint)]
@@ -279,12 +347,12 @@ class Classifier():
 
         total_train_samples = train['uni'].shape[0]
         train_gen = self.get_sample_generator(train,
-                                              batch_size=opt.batch_size, target=target)
+                                              batch_size=opt.batch_size, target=target, cate_only=cate_only)
         self.steps_per_epoch = int(np.ceil(total_train_samples / float(opt.batch_size)))
 
         total_dev_samples = dev['uni'].shape[0]
         dev_gen = self.get_sample_generator(dev,
-                                            batch_size=opt.batch_size, target=target)
+                                            batch_size=opt.batch_size, target=target, cate_only=cate_only)
         self.validation_steps = int(np.ceil(total_dev_samples / float(opt.batch_size)))
 
         if not model_name:
@@ -336,7 +404,7 @@ class Classifier():
                             callbacks=callbacks)
 
         for i, t in enumerate(['b', 'm', 's', 'd', 'bmsd']):
-            if t in target:
+            if t == target:
                 model.load_weights('{}_0{}'.format(self.weight_fname, i+1)) # loads from checkout point if exists
                 open('{}_0{}.json'.format(self.model_fname, i+1), 'w').write(model.to_json())
                 model.save('{}_0{}.h5'.format(self.model_fname, i+1))
@@ -363,4 +431,5 @@ class ThreadsafeIter(object):
 if __name__ == '__main__':
     clsf = Classifier()
     fire.Fire({'train': clsf.train,
-               'predict': clsf.predict})
+               'predict': clsf.predict,
+               'infer': clsf.infer})
